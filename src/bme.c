@@ -1,20 +1,19 @@
 #include <esp_system.h>
 #include <esp_log.h>
-#include "driver/gpio.h"
-#include "driver/i2c.h"
+#include <driver/gpio.h>
+#include <driver/i2c.h>
 #include <bme280.h>
 
 #include "bme.h"
 
 #define LOG_TAG "BME"
 
-#define SDA_PIN CONFIG_BME280_SDA
-#define SCL_PIN CONFIG_BME280_SCL
-
+#define I2C_SDA CONFIG_I2C_SDA
+#define I2C_SCL CONFIG_I2C_SCL
 #define I2C_MASTER_NUM 1
-
 #define I2C_MASTER_ACK 0
 #define I2C_MASTER_NACK 1
+#define I2C_MASTER_FREQ_HZ 100000
 
 #define WRITE_BIT I2C_MASTER_WRITE /*!< I2C master write */
 #define READ_BIT I2C_MASTER_READ   /*!< I2C master read */
@@ -81,11 +80,11 @@ void init_i2c()
     int i2c_master_port = I2C_MASTER_NUM;
     i2c_config_t conf;
     conf.mode = I2C_MODE_MASTER;
-    conf.sda_io_num = SDA_PIN;
+    conf.sda_io_num = I2C_SDA;
     conf.sda_pullup_en = GPIO_PULLUP_ENABLE;
-    conf.scl_io_num = SCL_PIN;
+    conf.scl_io_num = I2C_SCL;
     conf.scl_pullup_en = GPIO_PULLUP_ENABLE;
-    conf.master.clk_speed = 100000;
+    conf.master.clk_speed = I2C_MASTER_FREQ_HZ;
     ESP_ERROR_CHECK(i2c_param_config(i2c_master_port, &conf));
     ESP_ERROR_CHECK(i2c_driver_install(i2c_master_port, conf.mode, 0, 0, 0));
 }
@@ -107,8 +106,6 @@ void bme_init()
     bme280.settings.filter = BME280_FILTER_COEFF_16;
     uint8_t settings_sel = BME280_OSR_PRESS_SEL | BME280_OSR_TEMP_SEL | BME280_OSR_HUM_SEL | BME280_FILTER_SEL;
     ESP_ERROR_CHECK(bme280_set_sensor_settings(settings_sel, &bme280));
-
-    ESP_ERROR_CHECK(bme280_set_sensor_mode(BME280_SLEEP_MODE, &bme280));
 }
 
 bme_data_t bme_read()
@@ -117,17 +114,16 @@ bme_data_t bme_read()
     struct bme280_data data;
 
     ESP_ERROR_CHECK(bme280_set_sensor_mode(BME280_FORCED_MODE, &bme280));
-    vTaskDelay(40 / portTICK_PERIOD_MS);
+    vTaskDelay(70 / portTICK_PERIOD_MS);
     ESP_ERROR_CHECK(bme280_get_sensor_data(BME280_ALL, &data, &bme280));
-    ESP_ERROR_CHECK(bme280_set_sensor_mode(BME280_SLEEP_MODE, &bme280));
 
     ret.humidity = data.humidity / 1024.0f;
-    ret.pressure = data.pressure / 1000.0f;
+    ret.pressure = data.pressure / 10000.0f;
     ret.temperature = data.temperature / 100.0f;
 
-    ESP_LOGD(LOG_TAG, "Pressure %.2f hPa", ret.pressure);
-    ESP_LOGD(LOG_TAG, "Temperature %.2f °C", ret.temperature);
-    ESP_LOGD(LOG_TAG, "Humidity %.2f %c", ret.humidity, '%');
+    ESP_LOGD(LOG_TAG, "Pressure %f hPa", ret.pressure);
+    ESP_LOGD(LOG_TAG, "Temperature %f °C", ret.temperature);
+    ESP_LOGD(LOG_TAG, "Humidity %f %%", ret.humidity);
 
     return ret;
 }

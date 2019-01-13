@@ -100,6 +100,7 @@
                 "/home/mdzurik/.platformio/packages/framework-espidf/components/wpa_supplicant/include",
                 "/home/mdzurik/.platformio/packages/framework-espidf/components/wpa_supplicant/port/include",
                 "/home/mdzurik/.platformio/packages/framework-espidf/components/xtensa-debug-module/include",
+                "/home/mdzurik/Documents/PlatformIO/Projects/esp32-weather-station/lib/BME280_driver",
                 "/home/mdzurik/.platformio/packages/tool-unity",
                 "/home/mdzurik/Documents/PlatformIO/Projects/esp32-weather-station/include",
                 ""
@@ -204,6 +205,7 @@
                     "/home/mdzurik/.platformio/packages/framework-espidf/components/wpa_supplicant/include",
                     "/home/mdzurik/.platformio/packages/framework-espidf/components/wpa_supplicant/port/include",
                     "/home/mdzurik/.platformio/packages/framework-espidf/components/xtensa-debug-module/include",
+                    "/home/mdzurik/Documents/PlatformIO/Projects/esp32-weather-station/lib/BME280_driver",
                     "/home/mdzurik/.platformio/packages/tool-unity",
                     "/home/mdzurik/Documents/PlatformIO/Projects/esp32-weather-station/include",
                     ""
@@ -217,12 +219,19 @@
                 "CONFIG_WIFI_CHANNEL=1",
                 "CONFIG_STATION_MAC={0x1A, 0xFF, 0xFF, 0xFF, 0xFF, 0x00}",
                 "CONFIG_SENSOR_MAC={0x1A, 0xFF, 0xFF, 0xFF, 0xFF, 0x01}",
-                "CONFIG_BME280_SDA=12",
-                "CONFIG_BME280_SCL=14",
-                "CONFIG_SLEEP_TIME=10",
+                "CONFIG_BUTTON_0=15",
+                "CONFIG_BUTTON_1=13",
+                "CONFIG_I2C_SDA=12",
+                "CONFIG_I2C_SCL=14",
+                "CONFIG_SPI_RST=32",
+                "CONFIG_SPI_CE=33",
+                "CONFIG_SPI_DC=25",
+                "CONFIG_SPI_DIN=23",
+                "CONFIG_SPI_CLK=18",
                 "CONFIG_PCD8544_TRANS_QUEUE_SIZE=96",
                 "CONFIG_PCD8544_BIAS_SYSTEM=7",
                 "CONFIG_PCD8544_TEMPERATURE_COEFFICIENT=2",
+                "CONFIG_PCD8544_BL=16",
                 "ESP32",
                 "ESP_PLATFORM",
                 "F_CPU=240000000L",
@@ -235,6 +244,5 @@
             "cppStandard": "c++11",
             "compilerPath": "/home/mdzurik/.platformio/packages/toolchain-xtensa32/bin/xtensa-esp32-elf-gcc -mlongcalls"
         }
-    ],
-    "version": 4
+    ]
 }

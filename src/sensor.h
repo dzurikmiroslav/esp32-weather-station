@@ -3,8 +3,6 @@
 
 #include <stdint.h>
 
-#define SENSOR_COUNT 2
-
 typedef struct
 {
    float pressure;
@@ -13,10 +11,12 @@ typedef struct
    uint8_t battery;
 } __attribute__((packed)) espnow_sensor_data_t;
 
+#define SENSOR_COUNT 2
+
 typedef enum
 {
    SENSOR_ID_INTERNAL,
-   SENSOR_ID_EXTERNAL_0
+   SENSOR_ID_EXTERNAL
 } sensor_id_t;
 
 #define HISTORY_SIZE 72        /* 3px each hour */

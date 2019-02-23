@@ -1,20 +1,14 @@
-#include <esp_system.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 #include <esp_log.h>
-#include <driver/gpio.h>
-#include <driver/i2c.h>
 #include <bme280.h>
 
 #include "bme.h"
+#include "i2c.h"
 
 #define LOG_TAG "BME"
 
-#define I2C_SDA CONFIG_I2C_SDA
-#define I2C_SCL CONFIG_I2C_SCL
 #define I2C_MASTER_NUM 1
-#define I2C_MASTER_ACK 0
-#define I2C_MASTER_NACK 1
-#define I2C_MASTER_FREQ_HZ 100000
-
 #define WRITE_BIT I2C_MASTER_WRITE /*!< I2C master write */
 #define READ_BIT I2C_MASTER_READ   /*!< I2C master read */
 #define ACK_CHECK_EN 0x1           /*!< I2C master will check ack from slave*/
@@ -24,78 +18,26 @@
 
 struct bme280_dev bme280;
 
-int8_t user_i2c_write(uint8_t dev_id, uint8_t reg_addr, uint8_t *reg_data, uint16_t len)
+static int8_t bme_i2c_write(uint8_t dev_id, uint8_t reg_addr, uint8_t *reg_data, uint16_t len)
 {
-    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
-    i2c_master_start(cmd);
-    i2c_master_write_byte(cmd, (dev_id << 1) | WRITE_BIT, ACK_CHECK_EN);
-    i2c_master_write_byte(cmd, reg_addr, ACK_CHECK_EN);
-    i2c_master_write(cmd, reg_data, len, ACK_CHECK_EN);
-    i2c_master_stop(cmd);
-    esp_err_t ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 100 / portTICK_RATE_MS);
-    i2c_cmd_link_delete(cmd);
-    return ret;
+    return i2c_write(dev_id, reg_addr, reg_data, len);
 }
 
-int8_t user_i2c_read(uint8_t dev_id, uint8_t reg_addr, uint8_t *reg_data, uint16_t len)
+static int8_t bme_i2c_read(uint8_t dev_id, uint8_t reg_addr, uint8_t *reg_data, uint16_t len)
 {
-    if (len == 0)
-    {
-        return 0;
-    }
-
-    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
-    i2c_master_start(cmd);
-    i2c_master_write_byte(cmd, (dev_id << 1) | WRITE_BIT, ACK_CHECK_EN);
-    i2c_master_write_byte(cmd, reg_addr, ACK_CHECK_EN);
-    i2c_master_stop(cmd);
-    esp_err_t ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 100 / portTICK_RATE_MS);
-    if (ret != ESP_OK)
-    {
-        return ret;
-    }
-    i2c_cmd_link_delete(cmd);
-
-    cmd = i2c_cmd_link_create();
-    i2c_master_start(cmd);
-    i2c_master_write_byte(cmd, (dev_id << 1) | READ_BIT, ACK_CHECK_EN);
-    if (len > 1)
-    {
-        i2c_master_read(cmd, reg_data, len - 1, ACK_VAL);
-    }
-    i2c_master_read_byte(cmd, reg_data + len - 1, NACK_VAL);
-    i2c_master_stop(cmd);
-    ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 100 / portTICK_RATE_MS);
-    i2c_cmd_link_delete(cmd);
-    return ret;
+    return i2c_read(dev_id, reg_addr, reg_data, len);
 }
 
-void user_delay_ms(uint32_t period)
+static void bme_delay_ms(uint32_t period)
 {
     vTaskDelay(period); // divide by portTICK_PERIOD_MS returns 0 ?
 }
 
-void init_i2c()
-{
-    int i2c_master_port = I2C_MASTER_NUM;
-    i2c_config_t conf;
-    conf.mode = I2C_MODE_MASTER;
-    conf.sda_io_num = I2C_SDA;
-    conf.sda_pullup_en = GPIO_PULLUP_ENABLE;
-    conf.scl_io_num = I2C_SCL;
-    conf.scl_pullup_en = GPIO_PULLUP_ENABLE;
-    conf.master.clk_speed = I2C_MASTER_FREQ_HZ;
-    ESP_ERROR_CHECK(i2c_param_config(i2c_master_port, &conf));
-    ESP_ERROR_CHECK(i2c_driver_install(i2c_master_port, conf.mode, 0, 0, 0));
-}
-
 void bme_init()
 {
-    init_i2c();
-
-    bme280.write = user_i2c_write;
-    bme280.read = user_i2c_read;
-    bme280.delay_ms = user_delay_ms;
+    bme280.write = bme_i2c_write;
+    bme280.read = bme_i2c_read;
+    bme280.delay_ms = bme_delay_ms;
     bme280.intf = BME280_I2C_INTF;
     bme280.dev_id = BME280_I2C_ADDR_PRIM;
     ESP_ERROR_CHECK(bme280_init(&bme280));

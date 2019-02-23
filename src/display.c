@@ -3,6 +3,7 @@
 #include <math.h>
 #include <string.h>
 #include <pcd8544.h>
+
 #include "display.h"
 
 #define LOG_TAG "DISPLAY"
@@ -114,6 +115,10 @@ char *value_unit(display_value_t value)
         return "hPa";
     case DISPLAY_VALUE_TEMPERATURE:
         return "\1C";
+    case DISPLAY_VALUE_CO2:
+        return "ppm";
+    case DISPLAY_VALUE_TVOC:
+        return "ppb";
     default:
         return NULL;
     }
@@ -129,15 +134,38 @@ uint16_t value_unit_size(display_value_t value)
         return 10;
     case DISPLAY_VALUE_TEMPERATURE:
         return 5;
+    case DISPLAY_VALUE_CO2:
+        return 1000;
+    case DISPLAY_VALUE_TVOC:
+        return 100;
     default:
         return 0;
     }
 }
 
-void display_print_value(sensor_id_t sensor_id, float pressure, float temperature, float humidity)
+void display_print_int_value(float temperature, float humidity, uint16_t co2, uint16_t tvoc)
 {
     pcd8544_set_pos(0, 0);
-    pcd8544_draw_bitmap(sensor_id == SENSOR_ID_INTERNAL ? ind_icon : out_icon, 7, 6, false);
+    pcd8544_draw_bitmap(ind_icon, 7, 6, false);
+    pcd8544_finalize_frame_buf();
+
+    pcd8544_set_pos(12, 0);
+    pcd8544_printf("%.2f%s", temperature);
+
+    pcd8544_set_pos(12, 1);
+    pcd8544_printf("%.2f%%", humidity);
+
+    pcd8544_set_pos(12, 2);
+    pcd8544_printf("%dppm", co2);
+
+    pcd8544_set_pos(12, 3);
+    pcd8544_printf("%dppb", tvoc);
+}
+
+void display_print_ext_value(float pressure, float temperature, float humidity)
+{
+    pcd8544_set_pos(0, 0);
+    pcd8544_draw_bitmap(out_icon, 7, 6, false);
     pcd8544_finalize_frame_buf();
 
     pcd8544_set_pos(12, 0);

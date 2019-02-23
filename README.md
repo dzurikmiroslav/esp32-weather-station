@@ -1,7 +1,7 @@
 # esp32-weather-station
 
 ESP32 weather station with external unit https://github.com/dzurikmiroslav/esp32-sensor.
-Use BME280 sensor and Nokia 5100 display. Planned measuring CO2 through CCS811.
+Use BME280 + CCS811 sensors and Nokia 5100 display. With bluetooth support.
 
 | Main screen | Temperature min/max | Temperature graph | Pressure grap |
 |:-----------:|:-------------------:|:-----------------:|:-------------:|

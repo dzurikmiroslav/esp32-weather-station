@@ -14,10 +14,10 @@
 #define LOG_TAG "BLE"
 
 #define DEVICE_NAME "ESP_METEO"
-#define SVC_INT_ENVIROMENTAL_SENSING_ID 0
-#define SVC_EXT_ENVIROMENTAL_SENSING_ID 1
-#define PERM_READ ESP_GATT_PERM_READ_ENCRYPTED
-#define PERM_READ_WRITE ESP_GATT_PERM_READ_ENCRYPTED | ESP_GATT_PERM_WRITE_ENCRYPTED
+#define PROFILE_INT_APP_ID 0
+#define PROFILE_EXT_APP_ID 1
+#define PERM_READ ESP_GATT_PERM_READ_ENC_MITM
+#define PERM_READ_WRITE ESP_GATT_PERM_READ_ENC_MITM | ESP_GATT_PERM_WRITE_ENC_MITM
 #define ADV_CONFIG_FLAG (1 << 0)
 #define SCAN_RSP_CONFIG_FLAG (1 << 1)
 
@@ -143,7 +143,7 @@ static uint8_t ext_press_ccc[2] = {0x00, 0x00};
 
 static const esp_gatts_attr_db_t gatt_int_env_db[INT_ENV_IDX_NB] = {
     [INT_ENV_IDX_SVC] =
-        {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&primary_service_uuid, PERM_READ, sizeof(uint16_t), sizeof(GATTS_SERVICE_UUID_ENV_SENS), (uint8_t *)&GATTS_SERVICE_UUID_ENV_SENS}},
+        {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&primary_service_uuid, PERM_READ, sizeof(uint16_t), sizeof(uint16_t), (uint8_t *)&GATTS_SERVICE_UUID_ENV_SENS}},
 
     [INT_ENV_IDX_CHAR_HUM] =
         {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_declaration_uuid, PERM_READ, sizeof(uint8_t), sizeof(uint8_t), (uint8_t *)&char_prop_read_notify}},
@@ -176,7 +176,7 @@ static const esp_gatts_attr_db_t gatt_int_env_db[INT_ENV_IDX_NB] = {
 
 static const esp_gatts_attr_db_t gatt_ext_env_db[EXT_ENV_IDX_NB] = {
     [EXT_ENV_IDX_SVC] =
-        {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&primary_service_uuid, PERM_READ, sizeof(uint16_t), sizeof(GATTS_SERVICE_UUID_ENV_SENS), (uint8_t *)&GATTS_SERVICE_UUID_ENV_SENS}},
+        {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&primary_service_uuid, PERM_READ, sizeof(uint16_t), sizeof(uint16_t), (uint8_t *)&GATTS_SERVICE_UUID_ENV_SENS}},
 
     [EXT_ENV_IDX_CHAR_HUM] =
         {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_declaration_uuid, PERM_READ, sizeof(uint8_t), sizeof(uint8_t), (uint8_t *)&char_prop_read_notify}},
@@ -203,14 +203,10 @@ static const esp_gatts_attr_db_t gatt_ext_env_db[EXT_ENV_IDX_NB] = {
 uint16_t int_env_sens_handle_table[INT_ENV_IDX_NB];
 uint16_t ext_env_sens_handle_table[EXT_ENV_IDX_NB];
 
-typedef struct
-{
-    uint16_t gatts_if;
-    uint16_t conn_id;
-    bool has_conn;
-} gatts_profile_inst_t;
-
-static gatts_profile_inst_t profile;
+static uint16_t ble_gatts_if[2];
+static uint16_t ble_connection_id;
+static bool ble_has_connection;
+static QueueHandle_t ble_connection_queue;
 
 void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t *param)
 {
@@ -218,34 +214,40 @@ void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp
     switch (event)
     {
     case ESP_GATTS_REG_EVT:
-        profile.gatts_if = gatts_if;
-        esp_ble_gap_set_device_name(DEVICE_NAME);
-        esp_ble_gap_config_local_privacy(true);
-        esp_ble_gatts_create_attr_tab(gatt_int_env_db, gatts_if, INT_ENV_IDX_NB, SVC_INT_ENVIROMENTAL_SENSING_ID);
-        esp_ble_gatts_create_attr_tab(gatt_ext_env_db, gatts_if, EXT_ENV_IDX_NB, SVC_EXT_ENVIROMENTAL_SENSING_ID);
+        ble_gatts_if[param->reg.app_id] = gatts_if;
+        switch (param->reg.app_id)
+        {
+        case PROFILE_INT_APP_ID:
+            esp_ble_gap_set_device_name(DEVICE_NAME);
+            esp_ble_gap_config_local_privacy(true);
+            esp_ble_gatts_create_attr_tab(gatt_int_env_db, gatts_if, INT_ENV_IDX_NB, 0);
+            break;
+        case PROFILE_EXT_APP_ID:
+            esp_ble_gatts_create_attr_tab(gatt_ext_env_db, gatts_if, EXT_ENV_IDX_NB, 1);
+            break;
+        default:
+            break;
+        }
         break;
     case ESP_GATTS_CREAT_ATTR_TAB_EVT:
-        if (param->add_attr_tab.svc_uuid.uuid.uuid16 == GATTS_SERVICE_UUID_ENV_SENS)
+        if (ble_gatts_if[PROFILE_INT_APP_ID] == gatts_if)
         {
-            if (param->add_attr_tab.num_handle == INT_ENV_IDX_NB)
-            {
-                memcpy(int_env_sens_handle_table, param->add_attr_tab.handles, sizeof(int_env_sens_handle_table));
-                esp_ble_gatts_start_service(int_env_sens_handle_table[INT_ENV_IDX_SVC]);
-            }
-            else
-            {
-                memcpy(ext_env_sens_handle_table, param->add_attr_tab.handles, sizeof(ext_env_sens_handle_table));
-                esp_ble_gatts_start_service(ext_env_sens_handle_table[EXT_ENV_IDX_SVC]);
-            }
+            memcpy(int_env_sens_handle_table, param->add_attr_tab.handles, sizeof(int_env_sens_handle_table));
+            esp_ble_gatts_start_service(int_env_sens_handle_table[INT_ENV_IDX_SVC]);
+        }
+        else if (ble_gatts_if[PROFILE_EXT_APP_ID] == gatts_if)
+        {
+            memcpy(ext_env_sens_handle_table, param->add_attr_tab.handles, sizeof(ext_env_sens_handle_table));
+            esp_ble_gatts_start_service(ext_env_sens_handle_table[EXT_ENV_IDX_SVC]);
         }
         break;
     case ESP_GATTS_CONNECT_EVT:
-        profile.conn_id = param->connect.conn_id;
-        profile.has_conn = true;
+        ble_connection_id = param->connect.conn_id;
         esp_ble_set_encryption(param->connect.remote_bda, ESP_BLE_SEC_ENCRYPT_MITM);
         break;
     case ESP_GATTS_DISCONNECT_EVT:
-        profile.has_conn = false;
+        ble_has_connection = false;
+        xQueueSend(ble_connection_queue, &ble_has_connection, portMAX_DELAY);
         esp_ble_gap_start_advertising(&adv_params);
         break;
     default:
@@ -282,13 +284,22 @@ void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *par
         esp_ble_gap_config_adv_data(&scan_rsp_data);
         adv_config_done |= SCAN_RSP_CONFIG_FLAG;
         break;
+    case ESP_GAP_BLE_AUTH_CMPL_EVT:
+        if (param->ble_security.auth_cmpl.success)
+        {
+            ble_has_connection = true;
+            xQueueSend(ble_connection_queue, &ble_has_connection, 0);
+        }
+        break;
     default:
         break;
     }
 }
 
-void ble_init()
+void ble_init(QueueHandle_t connection_queue)
 {
+    ble_connection_queue = connection_queue;
+
     ESP_ERROR_CHECK(esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT));
 
     esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
@@ -302,36 +313,25 @@ void ble_init()
     ESP_ERROR_CHECK(esp_ble_gatts_register_callback(gatts_event_handler));
     ESP_ERROR_CHECK(esp_ble_gap_register_callback(gap_event_handler));
 
-    ESP_ERROR_CHECK(esp_ble_gatts_app_register(0));
+    ESP_ERROR_CHECK(esp_ble_gatts_app_register(PROFILE_INT_APP_ID));
+    ESP_ERROR_CHECK(esp_ble_gatts_app_register(PROFILE_EXT_APP_ID));
 
     ESP_ERROR_CHECK(esp_ble_gatt_set_local_mtu(500));
     ESP_ERROR_CHECK(esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_DEFAULT, ESP_PWR_LVL_N12));
 
     esp_ble_auth_req_t auth_req = ESP_LE_AUTH_REQ_SC_MITM_BOND;
-    esp_ble_io_cap_t iocap = ESP_IO_CAP_OUT; //ESP_IO_CAP_NONE;
+    esp_ble_io_cap_t iocap = ESP_IO_CAP_NONE;
     uint8_t key_size = 16;
     uint8_t init_key = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
     uint8_t rsp_key = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
 
-    uint32_t passkey = 123456;
     uint8_t auth_option = ESP_BLE_ONLY_ACCEPT_SPECIFIED_AUTH_ENABLE;
-    ESP_ERROR_CHECK(esp_ble_gap_set_security_param(ESP_BLE_SM_SET_STATIC_PASSKEY, &passkey, sizeof(uint32_t)));
     ESP_ERROR_CHECK(esp_ble_gap_set_security_param(ESP_BLE_SM_AUTHEN_REQ_MODE, &auth_req, sizeof(uint8_t)));
     ESP_ERROR_CHECK(esp_ble_gap_set_security_param(ESP_BLE_SM_IOCAP_MODE, &iocap, sizeof(uint8_t)));
     ESP_ERROR_CHECK(esp_ble_gap_set_security_param(ESP_BLE_SM_MAX_KEY_SIZE, &key_size, sizeof(uint8_t)));
     ESP_ERROR_CHECK(esp_ble_gap_set_security_param(ESP_BLE_SM_ONLY_ACCEPT_SPECIFIED_SEC_AUTH, &auth_option, sizeof(uint8_t)));
     ESP_ERROR_CHECK(esp_ble_gap_set_security_param(ESP_BLE_SM_SET_INIT_KEY, &init_key, sizeof(uint8_t)));
     ESP_ERROR_CHECK(esp_ble_gap_set_security_param(ESP_BLE_SM_SET_RSP_KEY, &rsp_key, sizeof(uint8_t)));
-}
-
-void ble_start_advertising()
-{
-    esp_ble_gap_start_advertising(&adv_params);
-}
-
-void ble_stop_advetising()
-{
-    esp_ble_gap_stop_advertising();
 }
 
 void ble_set_int_humidity_temperature(float humidity, float temperature)
@@ -341,10 +341,10 @@ void ble_set_int_humidity_temperature(float humidity, float temperature)
 
     esp_ble_gatts_set_attr_value(int_env_sens_handle_table[INT_ENV_IDX_CHAR_VAL_HUM], sizeof(uint16_t), (uint8_t *)&int_hum_val);
     esp_ble_gatts_set_attr_value(int_env_sens_handle_table[INT_ENV_IDX_CHAR_VAL_TEMP], sizeof(int16_t), (uint8_t *)&int_temp_val);
-    if (profile.has_conn)
+    if (ble_has_connection)
     {
-        esp_ble_gatts_send_indicate(profile.gatts_if, profile.conn_id, int_env_sens_handle_table[INT_ENV_IDX_CHAR_VAL_HUM], sizeof(uint16_t), (uint8_t *)&int_hum_val, false);
-        esp_ble_gatts_send_indicate(profile.gatts_if, profile.conn_id, int_env_sens_handle_table[INT_ENV_IDX_CHAR_VAL_TEMP], sizeof(int16_t), (uint8_t *)&int_temp_val, false);
+        esp_ble_gatts_send_indicate(ble_gatts_if[PROFILE_INT_APP_ID], ble_connection_id, int_env_sens_handle_table[INT_ENV_IDX_CHAR_VAL_HUM], sizeof(uint16_t), (uint8_t *)&int_hum_val, false);
+        esp_ble_gatts_send_indicate(ble_gatts_if[PROFILE_INT_APP_ID], ble_connection_id, int_env_sens_handle_table[INT_ENV_IDX_CHAR_VAL_TEMP], sizeof(int16_t), (uint8_t *)&int_temp_val, false);
     }
 }
 
@@ -355,10 +355,10 @@ void ble_set_int_co2_tvoc(uint16_t co2, uint16_t tvoc)
 
     esp_ble_gatts_set_attr_value(int_env_sens_handle_table[INT_ENV_IDX_CHAR_VAL_CO2], sizeof(uint16_t), (uint8_t *)&int_co2_val);
     esp_ble_gatts_set_attr_value(int_env_sens_handle_table[INT_ENV_IDX_CHAR_VAL_TVOC], sizeof(uint16_t), (uint8_t *)&int_tvoc_val);
-    if (profile.has_conn)
+    if (ble_has_connection)
     {
-        esp_ble_gatts_send_indicate(profile.gatts_if, profile.conn_id, int_env_sens_handle_table[INT_ENV_IDX_CHAR_VAL_CO2], sizeof(uint16_t), (uint8_t *)&int_co2_val, false);
-        esp_ble_gatts_send_indicate(profile.gatts_if, profile.conn_id, int_env_sens_handle_table[INT_ENV_IDX_CHAR_VAL_TVOC], sizeof(uint16_t), (uint8_t *)&int_tvoc_val, false);
+        esp_ble_gatts_send_indicate(ble_gatts_if[PROFILE_INT_APP_ID], ble_connection_id, int_env_sens_handle_table[INT_ENV_IDX_CHAR_VAL_CO2], sizeof(uint16_t), (uint8_t *)&int_co2_val, false);
+        esp_ble_gatts_send_indicate(ble_gatts_if[PROFILE_INT_APP_ID], ble_connection_id, int_env_sens_handle_table[INT_ENV_IDX_CHAR_VAL_TVOC], sizeof(uint16_t), (uint8_t *)&int_tvoc_val, false);
     }
 }
 
@@ -371,22 +371,36 @@ void ble_set_ext_humidity_temperature_pressure(float humidity, float temperature
     esp_ble_gatts_set_attr_value(ext_env_sens_handle_table[EXT_ENV_IDX_CHAR_VAL_HUM], sizeof(uint16_t), (uint8_t *)&ext_hum_val);
     esp_ble_gatts_set_attr_value(ext_env_sens_handle_table[EXT_ENV_IDX_CHAR_VAL_TEMP], sizeof(int16_t), (uint8_t *)&ext_temp_val);
     esp_ble_gatts_set_attr_value(ext_env_sens_handle_table[EXT_ENV_IDX_CHAR_VAL_PRESS], sizeof(uint32_t), (uint8_t *)&ext_press_val);
-    if (profile.has_conn)
+    if (ble_has_connection)
     {
-        esp_ble_gatts_send_indicate(profile.gatts_if, profile.conn_id, ext_env_sens_handle_table[EXT_ENV_IDX_CHAR_VAL_HUM], sizeof(uint16_t), (uint8_t *)&ext_press_val, false);
-        esp_ble_gatts_send_indicate(profile.gatts_if, profile.conn_id, ext_env_sens_handle_table[EXT_ENV_IDX_CHAR_VAL_TEMP], sizeof(int16_t), (uint8_t *)&ext_press_val, false);
-        esp_ble_gatts_send_indicate(profile.gatts_if, profile.conn_id, ext_env_sens_handle_table[EXT_ENV_IDX_CHAR_VAL_PRESS], sizeof(uint32_t), (uint8_t *)&ext_press_val, false);
+        esp_ble_gatts_send_indicate(ble_gatts_if[PROFILE_EXT_APP_ID], ble_connection_id, ext_env_sens_handle_table[EXT_ENV_IDX_CHAR_VAL_HUM], sizeof(uint16_t), (uint8_t *)&ext_press_val, false);
+        esp_ble_gatts_send_indicate(ble_gatts_if[PROFILE_EXT_APP_ID], ble_connection_id, ext_env_sens_handle_table[EXT_ENV_IDX_CHAR_VAL_TEMP], sizeof(int16_t), (uint8_t *)&ext_press_val, false);
+        esp_ble_gatts_send_indicate(ble_gatts_if[PROFILE_EXT_APP_ID], ble_connection_id, ext_env_sens_handle_table[EXT_ENV_IDX_CHAR_VAL_PRESS], sizeof(uint32_t), (uint8_t *)&ext_press_val, false);
     }
 }
 
-bool ble_has_paired_device()
+void ble_enable_pairing(uint32_t passkey)
 {
-    return esp_ble_get_bond_device_num() > 0;
+    esp_ble_io_cap_t iocap = ESP_IO_CAP_OUT;
+    uint8_t auth_option = ESP_BLE_ONLY_ACCEPT_SPECIFIED_AUTH_DISABLE;
+    ESP_ERROR_CHECK(esp_ble_gap_set_security_param(ESP_BLE_SM_IOCAP_MODE, &iocap, sizeof(uint8_t)));
+    ESP_ERROR_CHECK(esp_ble_gap_set_security_param(ESP_BLE_SM_ONLY_ACCEPT_SPECIFIED_SEC_AUTH, &auth_option, sizeof(uint8_t)));
+    ESP_ERROR_CHECK(esp_ble_gap_set_security_param(ESP_BLE_SM_SET_STATIC_PASSKEY, &passkey, sizeof(uint32_t)));
+}
+
+void ble_disable_pairing()
+{
+    esp_ble_io_cap_t iocap = ESP_IO_CAP_NONE;
+    uint8_t auth_option = ESP_BLE_ONLY_ACCEPT_SPECIFIED_AUTH_ENABLE;
+    ESP_ERROR_CHECK(esp_ble_gap_set_security_param(ESP_BLE_SM_ONLY_ACCEPT_SPECIFIED_SEC_AUTH, &auth_option, sizeof(uint8_t)));
+    ESP_ERROR_CHECK(esp_ble_gap_set_security_param(ESP_BLE_SM_IOCAP_MODE, &iocap, sizeof(uint8_t)));
 }
 
 void ble_remove_paired_device()
 {
     int dev_num = esp_ble_get_bond_device_num();
+
+    ESP_LOGI(LOG_TAG, "Removing %d paired devices", dev_num);
 
     esp_ble_bond_dev_t *dev_list = (esp_ble_bond_dev_t *)malloc(sizeof(esp_ble_bond_dev_t) * dev_num);
     esp_ble_get_bond_device_list(&dev_num, dev_list);

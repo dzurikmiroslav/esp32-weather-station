@@ -1,6 +1,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 #include <freertos/task.h>
+#include <freertos/semphr.h>
 #include <esp_system.h>
 #include <esp_log.h>
 #include <nvs_flash.h>
@@ -101,13 +102,31 @@ typedef struct
 static uint8_t station_mac[ESP_NOW_ETH_ALEN] = CONFIG_STATION_MAC;
 static uint8_t sensor_mac[ESP_NOW_ETH_ALEN] = CONFIG_SENSOR_MAC;
 
-static QueueHandle_t lcd_queue;
-static TaskHandle_t ccs_read_task;
-
 static int_data_t int_data;
 static ext_data_t ext_data;
 
-static TickType_t button_click_time = 0;
+static QueueHandle_t lcd_print_sensor_queue;
+static QueueHandle_t ble_connection_queue;
+
+static SemaphoreHandle_t ble_reset_mutex;
+
+static TaskHandle_t ccs_read_task;
+static TaskHandle_t ble_reset_task;
+static TaskHandle_t lcd_print_sensor_task;
+
+typedef struct
+{
+   TickType_t click_time;
+   uint8_t button;
+} button_handler_data_t;
+
+static button_handler_data_t button_handler_data[2] = {
+    {
+        .button = BUTTON_0,
+    },
+    {
+        .button = BUTTON_1,
+    }};
 
 static void ext_data_push_history(ext_data_t *data)
 {
@@ -175,17 +194,25 @@ static void int_data_push_history(int_data_t *data)
    }
 }
 
-static void lcd_task(void *param)
+static void lcd_print_sensor_task_func(void *param)
 {
    lcd_screen_type_t screen = LCD_SCREEN_INT_FIRST;
-
+   bool ble_connection = false;
    TickType_t sensor_change_time = 0;
 
-   lcd_evt_t evt;
+   QueueSetHandle_t queue_set = xQueueCreateSet(20);
+   xQueueAddToSet(lcd_print_sensor_queue, queue_set);
+   xQueueAddToSet(ble_connection_queue, queue_set);
+
    while (true)
    {
-      if (xQueueReceive(lcd_queue, &evt, portMAX_DELAY))
+      QueueSetMemberHandle_t queue_member = xQueueSelectFromSet(queue_set, portMAX_DELAY);
+
+      bool refresh = false;
+      if (queue_member == lcd_print_sensor_queue)
       {
+         lcd_evt_t evt;
+         xQueueReceive(lcd_print_sensor_queue, &evt, 0);
          TickType_t now = xTaskGetTickCount();
          bool change_sensor = now >= (sensor_change_time + SCREN_TIMEOUT / portTICK_PERIOD_MS);
          bool change_screen = false;
@@ -234,67 +261,74 @@ static void lcd_task(void *param)
             sensor_change_time = now;
          }
 
-         if (change_sensor || change_screen || new_data)
+         refresh = change_sensor || change_screen || new_data;
+      }
+      else if (queue_member == ble_connection_queue)
+      {
+         xQueueReceive(ble_connection_queue, &ble_connection, 0);
+         refresh = true;
+      }
+
+      if (refresh)
+      {
+         display_clear();
+         switch (screen)
          {
-            display_clear();
-            switch (screen)
-            {
-            case LCD_SCREEN_TYPE_INT_MAIN:
-               display_print_int_value(int_data.temperature, int_data.humidity, int_data.co2, int_data.tvoc);
-               break;
-            case LCD_SCREEN_TYPE_INT_HUMIDITY_MIN_MAX:
-               display_print_min_max(SENSOR_ID_INTERNAL, DISPLAY_VALUE_HUMIDITY, int_data.history.humidity);
-               break;
-            case LCD_SCREEN_TYPE_INT_TEMPERATURE_MIN_MAX:
-               display_print_min_max(SENSOR_ID_INTERNAL, DISPLAY_VALUE_TEMPERATURE, int_data.history.temperature);
-               break;
-            case LCD_SCREEN_TYPE_INT_CO2_MIN_MAX:
-               display_print_min_max(SENSOR_ID_INTERNAL, DISPLAY_VALUE_CO2, int_data.history.co2);
-               break;
-            case LCD_SCREEN_TYPE_INT_TVOC_MIN_MAX:
-               display_print_min_max(SENSOR_ID_INTERNAL, DISPLAY_VALUE_TVOC, int_data.history.tvoc);
-               break;
-            case LCD_SCREEN_TYPE_INT_HUMIDITY_GRAPH:
-               display_print_graph(SENSOR_ID_INTERNAL, DISPLAY_VALUE_HUMIDITY, int_data.history.humidity);
-               break;
-            case LCD_SCREEN_TYPE_INT_TEMPERATURE_GRAPH:
-               display_print_graph(SENSOR_ID_INTERNAL, DISPLAY_VALUE_TEMPERATURE, int_data.history.temperature);
-               break;
-            case LCD_SCREEN_TYPE_INT_CO2_GRAPH:
-               display_print_graph(SENSOR_ID_INTERNAL, DISPLAY_VALUE_CO2, int_data.history.co2);
-               break;
-            case LCD_SCREEN_TYPE_INT_TVOC_GRAPH:
-               display_print_graph(SENSOR_ID_INTERNAL, DISPLAY_VALUE_TVOC, int_data.history.tvoc);
-               break;
-            case LCD_SCREEN_TYPE_EXT_MAIN:
-               display_print_ext_value(ext_data.pressure, ext_data.temperature, ext_data.humidity);
-               break;
-            case LCD_SCREEN_TYPE_EXT_HUMIDITY_MIN_MAX:
-               display_print_min_max(SENSOR_ID_EXTERNAL, DISPLAY_VALUE_HUMIDITY, ext_data.history.humidity);
-               break;
-            case LCD_SCREEN_TYPE_EXT_PRESSURE_MIN_MAX:
-               display_print_min_max(SENSOR_ID_EXTERNAL, DISPLAY_VALUE_PRESSURE, ext_data.history.pressure);
-               break;
-            case LCD_SCREEN_TYPE_EXT_TEMPERATURE_MIN_MAX:
-               display_print_min_max(SENSOR_ID_EXTERNAL, DISPLAY_VALUE_TEMPERATURE, ext_data.history.temperature);
-               break;
-            case LCD_SCREEN_TYPE_EXT_HUMIDITY_GRAPH:
-               display_print_graph(SENSOR_ID_EXTERNAL, DISPLAY_VALUE_HUMIDITY, ext_data.history.humidity);
-               break;
-            case LCD_SCREEN_TYPE_EXT_PRESSURE_GRAPH:
-               display_print_graph(SENSOR_ID_EXTERNAL, DISPLAY_VALUE_PRESSURE, ext_data.history.pressure);
-               break;
-            case LCD_SCREEN_TYPE_EXT_TEMPERATURE_GRAPH:
-               display_print_graph(SENSOR_ID_EXTERNAL, DISPLAY_VALUE_TEMPERATURE, ext_data.history.temperature);
-               break;
-            }
-            display_sync();
+         case LCD_SCREEN_TYPE_INT_MAIN:
+            display_print_int_value(int_data.temperature, int_data.humidity, int_data.co2, int_data.tvoc, ble_connection);
+            break;
+         case LCD_SCREEN_TYPE_INT_HUMIDITY_MIN_MAX:
+            display_print_min_max(SENSOR_ID_INTERNAL, DISPLAY_VALUE_HUMIDITY, int_data.history.humidity);
+            break;
+         case LCD_SCREEN_TYPE_INT_TEMPERATURE_MIN_MAX:
+            display_print_min_max(SENSOR_ID_INTERNAL, DISPLAY_VALUE_TEMPERATURE, int_data.history.temperature);
+            break;
+         case LCD_SCREEN_TYPE_INT_CO2_MIN_MAX:
+            display_print_min_max(SENSOR_ID_INTERNAL, DISPLAY_VALUE_CO2, int_data.history.co2);
+            break;
+         case LCD_SCREEN_TYPE_INT_TVOC_MIN_MAX:
+            display_print_min_max(SENSOR_ID_INTERNAL, DISPLAY_VALUE_TVOC, int_data.history.tvoc);
+            break;
+         case LCD_SCREEN_TYPE_INT_HUMIDITY_GRAPH:
+            display_print_graph(SENSOR_ID_INTERNAL, DISPLAY_VALUE_HUMIDITY, int_data.history.humidity);
+            break;
+         case LCD_SCREEN_TYPE_INT_TEMPERATURE_GRAPH:
+            display_print_graph(SENSOR_ID_INTERNAL, DISPLAY_VALUE_TEMPERATURE, int_data.history.temperature);
+            break;
+         case LCD_SCREEN_TYPE_INT_CO2_GRAPH:
+            display_print_graph(SENSOR_ID_INTERNAL, DISPLAY_VALUE_CO2, int_data.history.co2);
+            break;
+         case LCD_SCREEN_TYPE_INT_TVOC_GRAPH:
+            display_print_graph(SENSOR_ID_INTERNAL, DISPLAY_VALUE_TVOC, int_data.history.tvoc);
+            break;
+         case LCD_SCREEN_TYPE_EXT_MAIN:
+            display_print_ext_value(ext_data.pressure, ext_data.temperature, ext_data.humidity, ble_connection);
+            break;
+         case LCD_SCREEN_TYPE_EXT_HUMIDITY_MIN_MAX:
+            display_print_min_max(SENSOR_ID_EXTERNAL, DISPLAY_VALUE_HUMIDITY, ext_data.history.humidity);
+            break;
+         case LCD_SCREEN_TYPE_EXT_PRESSURE_MIN_MAX:
+            display_print_min_max(SENSOR_ID_EXTERNAL, DISPLAY_VALUE_PRESSURE, ext_data.history.pressure);
+            break;
+         case LCD_SCREEN_TYPE_EXT_TEMPERATURE_MIN_MAX:
+            display_print_min_max(SENSOR_ID_EXTERNAL, DISPLAY_VALUE_TEMPERATURE, ext_data.history.temperature);
+            break;
+         case LCD_SCREEN_TYPE_EXT_HUMIDITY_GRAPH:
+            display_print_graph(SENSOR_ID_EXTERNAL, DISPLAY_VALUE_HUMIDITY, ext_data.history.humidity);
+            break;
+         case LCD_SCREEN_TYPE_EXT_PRESSURE_GRAPH:
+            display_print_graph(SENSOR_ID_EXTERNAL, DISPLAY_VALUE_PRESSURE, ext_data.history.pressure);
+            break;
+         case LCD_SCREEN_TYPE_EXT_TEMPERATURE_GRAPH:
+            display_print_graph(SENSOR_ID_EXTERNAL, DISPLAY_VALUE_TEMPERATURE, ext_data.history.temperature);
+            break;
          }
+         display_sync();
       }
    }
 }
 
-static void read_bme_task(void *param)
+static void bme_read_task_func(void *param)
 {
    lcd_evt_t evt = LCD_EVT_INT_VALUE;
    bme_data_t bme_data;
@@ -308,13 +342,13 @@ static void read_bme_task(void *param)
       ble_set_int_humidity_temperature(int_data.humidity, int_data.temperature);
       int_data_push_history(&int_data);
 
-      xQueueSend(lcd_queue, &evt, portMAX_DELAY);
+      xQueueSend(lcd_print_sensor_queue, &evt, portMAX_DELAY);
 
       vTaskDelay(5000 / portTICK_PERIOD_MS);
    }
 }
 
-static void read_ccs_task(void *param)
+static void ccs_read_task_func(void *param)
 {
    lcd_evt_t evt = LCD_EVT_INT_VALUE;
    ccs_data_t ccs_data;
@@ -322,7 +356,7 @@ static void read_ccs_task(void *param)
    while (true)
    {
       vTaskSuspend(NULL);
-
+      vTaskDelay(100 / portTICK_PERIOD_MS);
       ccs_set_env_data(int_data.humidity, int_data.temperature);
       ccs_data = ccs_read();
 
@@ -331,24 +365,79 @@ static void read_ccs_task(void *param)
       ble_set_int_co2_tvoc(int_data.co2, int_data.tvoc);
       int_data_push_history(&int_data);
 
-      xQueueSend(lcd_queue, &evt, portMAX_DELAY);
+      xQueueSend(lcd_print_sensor_queue, &evt, portMAX_DELAY);
+   }
+}
+
+static void ble_reset_task_func(void *param)
+{
+   while (true)
+   {
+      vTaskSuspend(NULL);
+
+      if (!xSemaphoreTake(ble_reset_mutex, 3000 / portTICK_PERIOD_MS))
+      {
+         ESP_LOGI(LOG_TAG, "BLE start pairing");
+         vTaskSuspend(lcd_print_sensor_task);
+
+         uint32_t passkey = (esp_random() / (float)UINT32_MAX) * 999999;
+         ble_remove_paired_device();
+         ble_enable_pairing(passkey);
+
+         bool connection;
+         bool paired;
+         uint8_t countdown = 60;
+         do
+         {
+            display_clear();
+            display_print_pairing(passkey, countdown % 2);
+            display_sync();
+         } while (!(paired = xQueuePeek(ble_connection_queue, &connection, 1000 / portTICK_PERIOD_MS)) && countdown--);
+
+         ESP_LOGI(LOG_TAG, "BLE stop pairing");
+         ble_disable_pairing();
+
+         display_clear();
+         display_print_paired_result(paired);
+         display_sync();
+         vTaskDelay(3000 / portTICK_PERIOD_MS);
+
+         xQueueReset(lcd_print_sensor_queue);
+         vTaskResume(lcd_print_sensor_task);
+      }
    }
 }
 
 static void IRAM_ATTR button_isr_handler(void *arg)
 {
-   TickType_t now = xTaskGetTickCount();
-   lcd_evt_t evt = (lcd_evt_t)arg;
-   if (now >= button_click_time + BUTTON_MIN_TRESHOLD / portTICK_PERIOD_MS)
+   if (!gpio_get_level(BUTTON_0) && !gpio_get_level(BUTTON_1))
    {
-      xQueueSendFromISR(lcd_queue, &evt, NULL);
-      button_click_time = now;
+      xSemaphoreTakeFromISR(ble_reset_mutex, 0);
+      xTaskResumeFromISR(ble_reset_task);
+   }
+   else
+   {
+      xSemaphoreGiveFromISR(ble_reset_mutex, NULL);
+      TickType_t now = xTaskGetTickCount();
+      button_handler_data_t *handler_data = (button_handler_data_t *)arg;
+      if (!gpio_get_level(handler_data->button))
+      {
+         if (now >= handler_data->click_time + BUTTON_MIN_TRESHOLD / portTICK_PERIOD_MS)
+         {
+            lcd_evt_t evt = handler_data->button == BUTTON_0 ? LCD_EVT_CHANGE_SENSOR : LCD_EVT_CHANGE_SCREEN;
+            xQueueSendFromISR(lcd_print_sensor_queue, &evt, NULL);
+            handler_data->click_time = now;
+         }
+      }
    }
 }
 
 static void IRAM_ATTR ccs_int_isr_halder(void *arg)
 {
-   xTaskResumeFromISR(ccs_read_task);
+   if (!gpio_get_level(CCS811_INT))
+   {
+      xTaskResumeFromISR(ccs_read_task);
+   }
 }
 
 static esp_err_t event_handler(void *ctx, system_event_t *event)
@@ -367,7 +456,7 @@ static void espnow_recv_cb(const uint8_t *mac_addr, const uint8_t *data, int len
    ext_data.temperature = sensor_data->temperature;
    ext_data_push_history(&ext_data);
 
-   xQueueSend(lcd_queue, &evt, portMAX_DELAY);
+   xQueueSend(lcd_print_sensor_queue, &evt, portMAX_DELAY);
 }
 
 static void espnow_init()
@@ -403,15 +492,15 @@ static void espnow_init()
 static void gpio_interupt_init()
 {
    gpio_config_t io_conf;
-   io_conf.intr_type = GPIO_INTR_NEGEDGE;
+   io_conf.intr_type = GPIO_INTR_ANYEDGE;
    io_conf.pin_bit_mask = ((1ULL << BUTTON_0) | (1ULL << BUTTON_1) | (1ULL << CCS811_INT));
    io_conf.mode = GPIO_MODE_INPUT;
    io_conf.pull_down_en = 0;
    io_conf.pull_up_en = 1;
    ESP_ERROR_CHECK(gpio_config(&io_conf));
    ESP_ERROR_CHECK(gpio_install_isr_service(0));
-   ESP_ERROR_CHECK(gpio_isr_handler_add(BUTTON_0, button_isr_handler, (void *)LCD_EVT_CHANGE_SENSOR));
-   ESP_ERROR_CHECK(gpio_isr_handler_add(BUTTON_1, button_isr_handler, (void *)LCD_EVT_CHANGE_SCREEN));
+   ESP_ERROR_CHECK(gpio_isr_handler_add(BUTTON_0, button_isr_handler, &button_handler_data[0]));
+   ESP_ERROR_CHECK(gpio_isr_handler_add(BUTTON_1, button_isr_handler, &button_handler_data[1]));
    ESP_ERROR_CHECK(gpio_isr_handler_add(CCS811_INT, ccs_int_isr_halder, NULL));
 }
 
@@ -441,17 +530,20 @@ void app_main()
    }
    ESP_ERROR_CHECK(ret);
 
-   lcd_queue = xQueueCreate(10, sizeof(lcd_evt_t));
+   lcd_print_sensor_queue = xQueueCreate(10, sizeof(lcd_evt_t));
+   ble_connection_queue = xQueueCreate(10, sizeof(bool));
+   ble_reset_mutex = xSemaphoreCreateMutex();
 
    i2c_init();
    bme_init();
    ccs_init();
    espnow_init();
-   ble_init();
+   ble_init(ble_connection_queue);
    display_init();
    gpio_interupt_init();
 
-   xTaskCreate(read_bme_task, "read_bme_task", 4 * 1024, NULL, 5, NULL);
-   xTaskCreate(read_ccs_task, "read_ccs_task", 4 * 1024, NULL, 5, &ccs_read_task);
-   xTaskCreate(lcd_task, "lcd_task", 4 * 1024, NULL, 5, NULL);
+   xTaskCreate(bme_read_task_func, "bme_read_task", 4 * 1024, NULL, 5, NULL);
+   xTaskCreate(ccs_read_task_func, "ccs_read_task", 4 * 1024, NULL, 5, &ccs_read_task);
+   xTaskCreate(lcd_print_sensor_task_func, "lcd_print_sensor_task", 4 * 1024, NULL, 5, &lcd_print_sensor_task);
+   xTaskCreate(ble_reset_task_func, "ble_reset_task", 4 * 1024, NULL, 5, &ble_reset_task);
 }

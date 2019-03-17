@@ -26,6 +26,8 @@ const uint8_t degree_grade_glyph[] = {0x00, 0x06, 0x09, 0x09, 0x06};
 
 const uint8_t tilde_glyph[] = {0x08, 0x04, 0x08, 0x10, 0x08};
 
+const uint8_t bluetooth_glyph[] = {0x22, 0x14, 0x7F, 0x49, 0x36};
+
 const uint8_t ind_icon[] = {0xFF, 0xFF, 0xFF, 0x81, 0xFF, 0xFF, 0xFF,
                             0xFF, 0x81, 0xFB, 0xF7, 0xEF, 0x81, 0xFF,
                             0xFF, 0x81, 0xBD, 0xBD, 0xBD, 0xC3, 0xFF,
@@ -66,6 +68,7 @@ void display_init()
     pcd8544_set_backlight(false);
     pcd8544_create_char('\1', degree_grade_glyph);
     pcd8544_create_char('\2', tilde_glyph);
+    pcd8544_create_char('\3', bluetooth_glyph);
 }
 
 void display_clear()
@@ -143,14 +146,14 @@ uint16_t value_unit_size(display_value_t value)
     }
 }
 
-void display_print_int_value(float temperature, float humidity, uint16_t co2, uint16_t tvoc)
+void display_print_int_value(float temperature, float humidity, uint16_t co2, uint16_t tvoc, display_icon_t icon)
 {
     pcd8544_set_pos(0, 0);
     pcd8544_draw_bitmap(ind_icon, 7, 6, false);
     pcd8544_finalize_frame_buf();
 
     pcd8544_set_pos(12, 0);
-    pcd8544_printf("%.2f%s", temperature);
+    pcd8544_printf("%.2f%\1C", temperature);
 
     pcd8544_set_pos(12, 1);
     pcd8544_printf("%.2f%%", humidity);
@@ -160,22 +163,42 @@ void display_print_int_value(float temperature, float humidity, uint16_t co2, ui
 
     pcd8544_set_pos(12, 3);
     pcd8544_printf("%dppb", tvoc);
+
+    pcd8544_set_pos(78, 0);
+    switch (icon)
+    {
+    case DISPLAY_ICON_BLUETOOH:
+        pcd8544_puts("\3");
+        break;
+    default:
+        break;
+    }
 }
 
-void display_print_ext_value(float pressure, float temperature, float humidity)
+void display_print_ext_value(float pressure, float temperature, float humidity, display_icon_t icon)
 {
     pcd8544_set_pos(0, 0);
     pcd8544_draw_bitmap(out_icon, 7, 6, false);
     pcd8544_finalize_frame_buf();
 
     pcd8544_set_pos(12, 0);
-    pcd8544_printf("%.2f%s", temperature, value_unit(DISPLAY_VALUE_TEMPERATURE));
+    pcd8544_printf("%.2f\1C", temperature);
 
     pcd8544_set_pos(12, 1);
-    pcd8544_printf("%.2f%%", humidity, value_unit(DISPLAY_VALUE_HUMIDITY));
+    pcd8544_printf("%.2f%%", humidity);
 
     pcd8544_set_pos(12, 2);
-    pcd8544_printf("%.2fhPa", pressure, value_unit(DISPLAY_VALUE_PRESSURE));
+    pcd8544_printf("%.2fhPa", pressure);
+
+    pcd8544_set_pos(78, 0);
+    switch (icon)
+    {
+    case DISPLAY_ICON_BLUETOOH:
+        pcd8544_puts("\3");
+        break;
+    default:
+        break;
+    }
 }
 
 void display_print_graph(sensor_id_t sensor_id, display_value_t value, float data[HISTORY_SIZE])
@@ -254,4 +277,39 @@ void display_print_min_max(sensor_id_t sensor_id, display_value_t value, float d
     pcd8544_puts("MIN");
     pcd8544_set_pos(12, 4);
     pcd8544_printf("%.2f%s", min_val, unit);
+}
+
+void display_print_pairing(uint32_t passkey, bool blink)
+{
+    pcd8544_set_pos(0, 0);
+    pcd8544_puts("Passkey");
+
+    pcd8544_set_pos(0, 1);
+    pcd8544_printf("%06d", passkey);
+
+    if (blink)
+    {
+        pcd8544_set_pos(78, 0);
+        pcd8544_puts("\3");
+    }
+}
+
+void display_print_paired_result(bool successfully)
+{
+    if (successfully)
+    {
+        pcd8544_set_pos(0, 0);
+        pcd8544_puts("Device");
+        pcd8544_set_pos(0, 1);
+        pcd8544_puts("sucesffuly");
+        pcd8544_set_pos(0, 2);
+        pcd8544_puts("paired");
+    }
+    else
+    {
+        pcd8544_set_pos(0, 0);
+        pcd8544_puts("No device");
+        pcd8544_set_pos(0, 1);
+        pcd8544_puts("paired");
+    }
 }

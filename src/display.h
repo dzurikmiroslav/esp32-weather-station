@@ -48,18 +48,27 @@ typedef enum
     DISPLAY_VALUE_TVOC
 } display_value_t;
 
+typedef enum {
+    DISPLAY_ICON_NOBE,
+    DISPLAY_ICON_BLUETOOH
+} display_icon_t;
+
 void display_init();
 
 void display_clear();
 
 void display_sync();
 
-void display_print_int_value(float temperature, float humidity, uint16_t co2, uint16_t tvoc);
+void display_print_int_value(float temperature, float humidity, uint16_t co2, uint16_t tvoc, display_icon_t icon);
 
-void display_print_ext_value(float pressure, float temperature, float humidity);
+void display_print_ext_value(float pressure, float temperature, float humidity, display_icon_t icon);
 
 void display_print_min_max(sensor_id_t sensor_id, display_value_t value, float data[HISTORY_SIZE]);
 
 void display_print_graph(sensor_id_t sensor_id, display_value_t value, float data[HISTORY_SIZE]);
+
+void display_print_pairing(uint32_t passkey, bool blink);
+
+void display_print_paired_result(bool successfully);
 
 #endif /* DISPLAY_H_ */

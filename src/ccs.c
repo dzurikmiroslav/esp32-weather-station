@@ -71,29 +71,44 @@ void ccs_init()
 
     vTaskDelay(100 / portTICK_PERIOD_MS);
 
+    uint8_t hw_id;
+    ESP_ERROR_CHECK(i2c_read(CCS811_ADDRESS, CCS811_REG_HW_ID, &hw_id, 1));
+    ESP_LOGD(LOG_TAG, "HW id %04x", hw_id);
+    ESP_ERROR_CHECK(hw_id != 0x81);
+
+    uint8_t hw_version;
+    ESP_ERROR_CHECK(i2c_read(CCS811_ADDRESS, CCS811_REG_HW_VER, &hw_version, 1));
+    ESP_LOGD(LOG_TAG, "HW version %04x", hw_version);
+    ESP_ERROR_CHECK((hw_version & 0xF0) != 0x10);
+
+    uint8_t fw_boot_version[2];
+    ESP_ERROR_CHECK(i2c_read(CCS811_ADDRESS, CCS811_REG_FW_BOOT_VER, fw_boot_version, 2));
+    ESP_LOGD(LOG_TAG, "Bootloader version %04x", fw_boot_version[0] * 256 + fw_boot_version[1]);
+
+    uint8_t fw_app_version[2];
+    ESP_ERROR_CHECK(i2c_read(CCS811_ADDRESS, CCS811_REG_FW_APP_VER, fw_app_version, 2));
+    ESP_LOGD(LOG_TAG, "Application version %04x", fw_app_version[0] * 256 + fw_app_version[1]);
+
     uint8_t status;
     ESP_ERROR_CHECK(i2c_read(CCS811_ADDRESS, CCS811_REG_STATUS, &status, 1));
+    ESP_LOGD(LOG_TAG, "Status %d", status);
 
     if (!(status & CCS811_STATUS_FW_MODE))
     {
         ESP_LOGD(LOG_TAG, "Switch to application mode");
         ESP_ERROR_CHECK(!(status & CCS811_STATUS_APP_VALID));
 
-        ESP_ERROR_CHECK(i2c_write(CCS811_ADDRESS, CCS811_REG_APP_START, NULL, 0));
+        uint8_t empty[0] = {};
+        ESP_ERROR_CHECK(i2c_write(CCS811_ADDRESS, CCS811_REG_APP_START, empty, 0));
         vTaskDelay(100 / portTICK_PERIOD_MS);
-        ESP_ERROR_CHECK(i2c_read(CCS811_ADDRESS, CCS811_REG_STATUS, &status, 1));
 
+        ESP_ERROR_CHECK(i2c_read(CCS811_ADDRESS, CCS811_REG_STATUS, &status, 1));
+        ESP_LOGD(LOG_TAG, "Status %d", status);
         ESP_ERROR_CHECK(!(status & CCS811_STATUS_FW_MODE));
     }
 
-    ESP_ERROR_CHECK(i2c_write(CCS811_ADDRESS, CCS811_REG_APP_START, NULL, 0));
-
-    uint8_t hw_id;
-    ESP_ERROR_CHECK(i2c_read(CCS811_ADDRESS, CCS811_REG_HW_ID, &hw_id, 1));
-    ESP_LOGI(LOG_TAG, "HW id %d", hw_id);
-
     uint8_t meas_mode = (CCS811_MODE_10S << 4) | (1 << 3) | (0 << 2);
-    ESP_ERROR_CHECK(i2c_write(CCS811_ADDRESS, CCS811_REG_MEAS_MODE, &meas_mode, 1));
+    ESP_ERROR_CHECK(i2c_write(CCS811_ADDRESS, CCS811_REG_MEAS_MODE, &meas_mode, 1));  
 }
 
 void ccs_set_env_data(float humidity, float temperature)

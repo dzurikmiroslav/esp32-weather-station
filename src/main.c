@@ -218,7 +218,7 @@ static void lcd_print_sensor_task_func(void *param)
          bool change_screen = false;
          bool new_data = false;
 
-         if (now >= ext_data.write_time + SCREN_TIMEOUT / portTICK_PERIOD_MS)
+         if (now >= ext_data.write_time + EXT_SENSOR_TIMEUT / portTICK_PERIOD_MS)
          {
             ext_data.temperature = NAN;
             ext_data.humidity = NAN;
@@ -434,10 +434,7 @@ static void IRAM_ATTR button_isr_handler(void *arg)
 
 static void IRAM_ATTR ccs_int_isr_halder(void *arg)
 {
-   if (!gpio_get_level(CCS811_INT))
-   {
-      xTaskResumeFromISR(ccs_read_task);
-   }
+   xTaskResumeFromISR(ccs_read_task);
 }
 
 static esp_err_t event_handler(void *ctx, system_event_t *event)
@@ -454,6 +451,7 @@ static void espnow_recv_cb(const uint8_t *mac_addr, const uint8_t *data, int len
    ext_data.humidity = sensor_data->humidity;
    ext_data.pressure = sensor_data->pressure;
    ext_data.temperature = sensor_data->temperature;
+   ble_set_ext_humidity_temperature_pressure(ext_data.humidity, ext_data.temperature, ext_data.pressure);
    ext_data_push_history(&ext_data);
 
    xQueueSend(lcd_print_sensor_queue, &evt, portMAX_DELAY);
@@ -492,16 +490,28 @@ static void espnow_init()
 static void gpio_interupt_init()
 {
    gpio_config_t io_conf;
-   io_conf.intr_type = GPIO_INTR_ANYEDGE;
-   io_conf.pin_bit_mask = ((1ULL << BUTTON_0) | (1ULL << BUTTON_1) | (1ULL << CCS811_INT));
+   io_conf.intr_type = GPIO_INTR_NEGEDGE;
+   io_conf.pin_bit_mask = (1ULL << BUTTON_0) | (1ULL << BUTTON_1);
    io_conf.mode = GPIO_MODE_INPUT;
    io_conf.pull_down_en = 0;
    io_conf.pull_up_en = 1;
    ESP_ERROR_CHECK(gpio_config(&io_conf));
+
+   io_conf.intr_type = GPIO_INTR_NEGEDGE;
+   io_conf.pin_bit_mask = 1ULL << CCS811_INT;
+   io_conf.mode = GPIO_MODE_INPUT;
+   io_conf.pull_down_en = 0;
+   io_conf.pull_up_en = 1;
+   ESP_ERROR_CHECK(gpio_config(&io_conf));
+
    ESP_ERROR_CHECK(gpio_install_isr_service(0));
    ESP_ERROR_CHECK(gpio_isr_handler_add(BUTTON_0, button_isr_handler, &button_handler_data[0]));
    ESP_ERROR_CHECK(gpio_isr_handler_add(BUTTON_1, button_isr_handler, &button_handler_data[1]));
-   ESP_ERROR_CHECK(gpio_isr_handler_add(CCS811_INT, ccs_int_isr_halder, NULL));
+   ESP_ERROR_CHECK(gpio_isr_handler_add(CCS811_INT, ccs_int_isr_halder, NULL));\
+
+   if (!gpio_get_level(CCS811_INT)) {
+      ccs_read();
+   }
 }
 
 void app_main()

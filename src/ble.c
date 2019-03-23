@@ -373,8 +373,8 @@ void ble_set_ext_humidity_temperature_pressure(float humidity, float temperature
     esp_ble_gatts_set_attr_value(ext_env_sens_handle_table[EXT_ENV_IDX_CHAR_VAL_PRESS], sizeof(uint32_t), (uint8_t *)&ext_press_val);
     if (ble_has_connection)
     {
-        esp_ble_gatts_send_indicate(ble_gatts_if[PROFILE_EXT_APP_ID], ble_connection_id, ext_env_sens_handle_table[EXT_ENV_IDX_CHAR_VAL_HUM], sizeof(uint16_t), (uint8_t *)&ext_press_val, false);
-        esp_ble_gatts_send_indicate(ble_gatts_if[PROFILE_EXT_APP_ID], ble_connection_id, ext_env_sens_handle_table[EXT_ENV_IDX_CHAR_VAL_TEMP], sizeof(int16_t), (uint8_t *)&ext_press_val, false);
+        esp_ble_gatts_send_indicate(ble_gatts_if[PROFILE_EXT_APP_ID], ble_connection_id, ext_env_sens_handle_table[EXT_ENV_IDX_CHAR_VAL_HUM], sizeof(uint16_t), (uint8_t *)&ext_hum_val, false);
+        esp_ble_gatts_send_indicate(ble_gatts_if[PROFILE_EXT_APP_ID], ble_connection_id, ext_env_sens_handle_table[EXT_ENV_IDX_CHAR_VAL_TEMP], sizeof(int16_t), (uint8_t *)&ext_temp_val, false);
         esp_ble_gatts_send_indicate(ble_gatts_if[PROFILE_EXT_APP_ID], ble_connection_id, ext_env_sens_handle_table[EXT_ENV_IDX_CHAR_VAL_PRESS], sizeof(uint32_t), (uint8_t *)&ext_press_val, false);
     }
 }

@@ -61,7 +61,7 @@ static esp_ble_adv_params_t adv_params = {
     .adv_int_min = 0x0800,
     .adv_int_max = 0x0800,
     .adv_type = ADV_TYPE_IND,
-    .own_addr_type = BLE_ADDR_TYPE_RANDOM,
+    .own_addr_type = BLE_ADDR_TYPE_PUBLIC,
     .channel_map = ADV_CHNL_ALL,
     .adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY,
 };
@@ -219,7 +219,7 @@ void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp
         {
         case PROFILE_INT_APP_ID:
             esp_ble_gap_set_device_name(DEVICE_NAME);
-            esp_ble_gap_config_local_privacy(true);
+            esp_ble_gap_config_local_privacy(false);
             esp_ble_gatts_create_attr_tab(gatt_int_env_db, gatts_if, INT_ENV_IDX_NB, 0);
             break;
         case PROFILE_EXT_APP_ID:

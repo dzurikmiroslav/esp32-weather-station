@@ -13,11 +13,18 @@
 
 #define LOG_TAG "BLE"
 
+#define ENABLE_BLE_SECURITY CONFIG_ENABLE_BLE_SECURITY
 #define DEVICE_NAME "ESP_METEO"
-#define PROFILE_INT_APP_ID 0
-#define PROFILE_EXT_APP_ID 1
+#define PROFILE_APP_ID 0
+
+#if ENABLE_BLE_SECURITY
 #define PERM_READ ESP_GATT_PERM_READ_ENC_MITM
 #define PERM_READ_WRITE ESP_GATT_PERM_READ_ENC_MITM | ESP_GATT_PERM_WRITE_ENC_MITM
+#else
+#define PERM_READ ESP_GATT_PERM_READ
+#define PERM_READ_WRITE ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE
+#endif /* ENABLE_BLE_SECURITY */
+
 #define ADV_CONFIG_FLAG (1 << 0)
 #define SCAN_RSP_CONFIG_FLAG (1 << 1)
 
@@ -68,52 +75,47 @@ static esp_ble_adv_params_t adv_params = {
 
 enum
 {
-    INT_ENV_IDX_SVC,
+    ENV_SENS_IDX_SVC,
 
-    INT_ENV_IDX_CHAR_HUM,
-    INT_ENV_IDX_CHAR_VAL_HUM,
-    INT_ENV_IDX_CHAR_CFG_HUM,
+    ENV_SENS_IDX_CHAR_INT_HUM,
+    ENV_SENS_IDX_CHAR_VAL_INT_HUM,
+    ENV_SENS_IDX_CHAR_CFG_INT_HUM,
 
-    INT_ENV_IDX_CHAR_TEMP,
-    INT_ENV_IDX_CHAR_VAL_TEMP,
-    INT_ENV_IDX_CHAR_CFG_TEMP,
+    ENV_SENS_IDX_CHAR_INT_TEMP,
+    ENV_SENS_IDX_CHAR_VAL_INT_TEMP,
+    ENV_SENS_IDX_CHAR_CFG_INT_TEMP,
 
-    INT_ENV_IDX_CHAR_CO2,
-    INT_ENV_IDX_CHAR_VAL_CO2,
-    INT_ENV_IDX_CHAR_CFG_CO2,
+    ENV_SENS_IDX_CHAR_INT_CO2,
+    ENV_SENS_IDX_CHAR_VAL_INT_CO2,
+    ENV_SENS_IDX_CHAR_CFG_INT_CO2,
 
-    INT_ENV_IDX_CHAR_TVOC,
-    INT_ENV_IDX_CHAR_VAL_TVOC,
-    INT_ENV_IDX_CHAR_CFG_TVOC,
+    ENV_SENS_IDX_CHAR_INT_TVOC,
+    ENV_SENS_IDX_CHAR_VAL_INT_TVOC,
+    ENV_SENS_IDX_CHAR_CFG_INT_TVOC,
 
-    INT_ENV_IDX_NB
-};
+    ENV_SENS_IDX_CHAR_EXT_HUM,
+    ENV_SENS_IDX_CHAR_VAL_EXT_HUM,
+    ENV_SENS_IDX_CHAR_CFG_EXT_HUM,
 
-enum
-{
-    EXT_ENV_IDX_SVC,
+    ENV_SENS_IDX_CHAR_EXT_TEMP,
+    ENV_SENS_IDX_CHAR_VAL_EXT_TEMP,
+    ENV_SENS_IDX_CHAR_CFG_EXT_TEMP,
 
-    EXT_ENV_IDX_CHAR_HUM,
-    EXT_ENV_IDX_CHAR_VAL_HUM,
-    EXT_ENV_IDX_CHAR_CFG_HUM,
+    ENV_SENS_IDX_CHAR_EXT_PRESS,
+    ENV_SENS_IDX_CHAR_VAL_EXT_PRESS,
+    ENV_SENS_IDX_CHAR_CFG_EXT_PRESS,
 
-    EXT_ENV_IDX_CHAR_TEMP,
-    EXT_ENV_IDX_CHAR_VAL_TEMP,
-    EXT_ENV_IDX_CHAR_CFG_TEMP,
-
-    EXT_ENV_IDX_CHAR_PRESS,
-    EXT_ENV_IDX_CHAR_VAL_PRESS,
-    EXT_ENV_IDX_CHAR_CFG_PRESS,
-
-    EXT_ENV_IDX_NB
+    ENV_SENS_IDX_NB
 };
 
 static const uint16_t GATTS_SERVICE_UUID_ENV_SENS = 0x181A;
-static const uint16_t GATTS_CHAR_UUID_HUM = 0x2A6F;
-static const uint16_t GATTS_CHAR_UUID_TEMP = 0x2A6E;
-static const uint16_t GATTS_CHAR_UUID_PRESS = 0x2A6D;
-static const uint16_t GATTS_CHAR_UUID_CO2 = 0xFF01;
-static const uint16_t GATTS_CHAR_UUID_TVOC = 0xFF02;
+static const uint16_t GATTS_CHAR_UUID_INT_HUM = 0x2A6F;
+static const uint16_t GATTS_CHAR_UUID_INT_TEMP = 0x2A6E;
+static const uint16_t GATTS_CHAR_UUID_INT_CO2 = 0x2F01;
+static const uint16_t GATTS_CHAR_UUID_INT_TVOC = 0x2F02;
+static const uint16_t GATTS_CHAR_UUID_EXT_HUM = 0x3A6F;
+static const uint16_t GATTS_CHAR_UUID_EXT_TEMP = 0x3A6E;
+static const uint16_t GATTS_CHAR_UUID_EXT_PRESS = 0x3A6D;
 
 static const uint16_t primary_service_uuid = ESP_GATT_UUID_PRI_SERVICE;
 static const uint16_t character_declaration_uuid = ESP_GATT_UUID_CHAR_DECLARE;
@@ -141,69 +143,63 @@ static uint8_t ext_temp_ccc[2] = {0x00, 0x00};
 static uint32_t ext_press_val = 0;
 static uint8_t ext_press_ccc[2] = {0x00, 0x00};
 
-static const esp_gatts_attr_db_t gatt_int_env_db[INT_ENV_IDX_NB] = {
-    [INT_ENV_IDX_SVC] =
+static const esp_gatts_attr_db_t gatt_env_sens_db[ENV_SENS_IDX_NB] = {
+    [ENV_SENS_IDX_SVC] =
         {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&primary_service_uuid, PERM_READ, sizeof(uint16_t), sizeof(uint16_t), (uint8_t *)&GATTS_SERVICE_UUID_ENV_SENS}},
 
-    [INT_ENV_IDX_CHAR_HUM] =
+    [ENV_SENS_IDX_CHAR_INT_HUM] =
         {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_declaration_uuid, PERM_READ, sizeof(uint8_t), sizeof(uint8_t), (uint8_t *)&char_prop_read_notify}},
-    [INT_ENV_IDX_CHAR_VAL_HUM] =
-        {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&GATTS_CHAR_UUID_HUM, PERM_READ, sizeof(uint16_t), sizeof(uint16_t), (uint8_t *)&int_hum_val}},
-    [INT_ENV_IDX_CHAR_CFG_HUM] =
+    [ENV_SENS_IDX_CHAR_VAL_INT_HUM] =
+        {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&GATTS_CHAR_UUID_INT_HUM, PERM_READ, sizeof(uint16_t), sizeof(uint16_t), (uint8_t *)&int_hum_val}},
+    [ENV_SENS_IDX_CHAR_CFG_INT_HUM] =
         {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_client_config_uuid, PERM_READ_WRITE, 2 * sizeof(uint8_t), 2 * sizeof(uint8_t), (uint8_t *)int_hum_ccc}},
 
-    [INT_ENV_IDX_CHAR_TEMP] =
+    [ENV_SENS_IDX_CHAR_INT_TEMP] =
         {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_declaration_uuid, PERM_READ, sizeof(uint8_t), sizeof(uint8_t), (uint8_t *)&char_prop_read_notify}},
-    [INT_ENV_IDX_CHAR_VAL_TEMP] =
-        {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&GATTS_CHAR_UUID_TEMP, PERM_READ, sizeof(int16_t), sizeof(int16_t), (uint8_t *)&int_temp_val}},
-    [INT_ENV_IDX_CHAR_CFG_TEMP] =
+    [ENV_SENS_IDX_CHAR_VAL_INT_TEMP] =
+        {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&GATTS_CHAR_UUID_INT_TEMP, PERM_READ, sizeof(int16_t), sizeof(int16_t), (uint8_t *)&int_temp_val}},
+    [ENV_SENS_IDX_CHAR_CFG_INT_TEMP] =
         {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_client_config_uuid, PERM_READ_WRITE, 2 * sizeof(uint8_t), 2 * sizeof(uint8_t), (uint8_t *)int_temp_ccc}},
 
-    [INT_ENV_IDX_CHAR_CO2] =
+    [ENV_SENS_IDX_CHAR_INT_CO2] =
         {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_declaration_uuid, PERM_READ, sizeof(uint8_t), sizeof(uint8_t), (uint8_t *)&char_prop_read_notify}},
-    [INT_ENV_IDX_CHAR_VAL_CO2] =
-        {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&GATTS_CHAR_UUID_CO2, PERM_READ, sizeof(uint16_t), sizeof(uint16_t), (uint8_t *)&int_co2_val}},
-    [INT_ENV_IDX_CHAR_CFG_CO2] =
+    [ENV_SENS_IDX_CHAR_VAL_INT_CO2] =
+        {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&GATTS_CHAR_UUID_INT_CO2, PERM_READ, sizeof(uint16_t), sizeof(uint16_t), (uint8_t *)&int_co2_val}},
+    [ENV_SENS_IDX_CHAR_CFG_INT_CO2] =
         {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_client_config_uuid, PERM_READ_WRITE, 2 * sizeof(uint8_t), 2 * sizeof(uint8_t), (uint8_t *)int_co2_ccc}},
 
-    [INT_ENV_IDX_CHAR_TVOC] =
+    [ENV_SENS_IDX_CHAR_INT_TVOC] =
         {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_declaration_uuid, PERM_READ, sizeof(uint8_t), sizeof(uint8_t), (uint8_t *)&char_prop_read_notify}},
-    [INT_ENV_IDX_CHAR_VAL_TVOC] =
-        {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&GATTS_CHAR_UUID_TVOC, PERM_READ, sizeof(uint16_t), sizeof(uint16_t), (uint8_t *)&int_tvoc_val}},
-    [INT_ENV_IDX_CHAR_CFG_TVOC] =
+    [ENV_SENS_IDX_CHAR_VAL_INT_TVOC] =
+        {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&GATTS_CHAR_UUID_INT_TVOC, PERM_READ, sizeof(uint16_t), sizeof(uint16_t), (uint8_t *)&int_tvoc_val}},
+    [ENV_SENS_IDX_CHAR_CFG_INT_TVOC] =
         {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_client_config_uuid, PERM_READ_WRITE, 2 * sizeof(uint8_t), 2 * sizeof(uint8_t), (uint8_t *)int_tvoc_ccc}},
-};
 
-static const esp_gatts_attr_db_t gatt_ext_env_db[EXT_ENV_IDX_NB] = {
-    [EXT_ENV_IDX_SVC] =
-        {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&primary_service_uuid, PERM_READ, sizeof(uint16_t), sizeof(uint16_t), (uint8_t *)&GATTS_SERVICE_UUID_ENV_SENS}},
-
-    [EXT_ENV_IDX_CHAR_HUM] =
+    [ENV_SENS_IDX_CHAR_EXT_HUM] =
         {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_declaration_uuid, PERM_READ, sizeof(uint8_t), sizeof(uint8_t), (uint8_t *)&char_prop_read_notify}},
-    [EXT_ENV_IDX_CHAR_VAL_HUM] =
-        {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&GATTS_CHAR_UUID_HUM, PERM_READ, sizeof(uint16_t), sizeof(uint16_t), (uint8_t *)&ext_hum_val}},
-    [EXT_ENV_IDX_CHAR_CFG_HUM] =
+    [ENV_SENS_IDX_CHAR_VAL_EXT_HUM] =
+        {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&GATTS_CHAR_UUID_EXT_HUM, PERM_READ, sizeof(uint16_t), sizeof(uint16_t), (uint8_t *)&ext_hum_val}},
+    [ENV_SENS_IDX_CHAR_CFG_EXT_HUM] =
         {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_client_config_uuid, PERM_READ_WRITE, 2 * sizeof(uint8_t), 2 * sizeof(uint8_t), (uint8_t *)ext_hum_ccc}},
 
-    [EXT_ENV_IDX_CHAR_TEMP] =
+    [ENV_SENS_IDX_CHAR_EXT_TEMP] =
         {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_declaration_uuid, PERM_READ, sizeof(uint8_t), sizeof(uint8_t), (uint8_t *)&char_prop_read_notify}},
-    [EXT_ENV_IDX_CHAR_VAL_TEMP] =
-        {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&GATTS_CHAR_UUID_TEMP, PERM_READ, sizeof(int16_t), sizeof(int16_t), (uint8_t *)&ext_temp_val}},
-    [EXT_ENV_IDX_CHAR_CFG_TEMP] =
+    [ENV_SENS_IDX_CHAR_VAL_EXT_TEMP] =
+        {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&GATTS_CHAR_UUID_EXT_TEMP, PERM_READ, sizeof(int16_t), sizeof(int16_t), (uint8_t *)&ext_temp_val}},
+    [ENV_SENS_IDX_CHAR_CFG_EXT_TEMP] =
         {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_client_config_uuid, PERM_READ_WRITE, 2 * sizeof(uint8_t), 2 * sizeof(uint8_t), (uint8_t *)ext_temp_ccc}},
 
-    [EXT_ENV_IDX_CHAR_PRESS] =
+    [ENV_SENS_IDX_CHAR_EXT_PRESS] =
         {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_declaration_uuid, PERM_READ, sizeof(uint8_t), sizeof(uint8_t), (uint8_t *)&char_prop_read_notify}},
-    [EXT_ENV_IDX_CHAR_VAL_PRESS] =
-        {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&GATTS_CHAR_UUID_PRESS, PERM_READ, sizeof(uint32_t), sizeof(uint32_t), (uint8_t *)&ext_press_val}},
-    [EXT_ENV_IDX_CHAR_CFG_PRESS] =
+    [ENV_SENS_IDX_CHAR_VAL_EXT_PRESS] =
+        {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&GATTS_CHAR_UUID_EXT_PRESS, PERM_READ, sizeof(uint32_t), sizeof(uint32_t), (uint8_t *)&ext_press_val}},
+    [ENV_SENS_IDX_CHAR_CFG_EXT_PRESS] =
         {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_client_config_uuid, PERM_READ_WRITE, 2 * sizeof(uint8_t), 2 * sizeof(uint8_t), (uint8_t *)ext_press_ccc}},
 };
 
-uint16_t int_env_sens_handle_table[INT_ENV_IDX_NB];
-uint16_t ext_env_sens_handle_table[EXT_ENV_IDX_NB];
+uint16_t env_sens_handle_table[ENV_SENS_IDX_NB];
 
-static uint16_t ble_gatts_if[2];
+static uint16_t ble_gatts_if;
 static uint16_t ble_connection_id;
 static bool ble_has_connection;
 static QueueHandle_t ble_connection_queue;
@@ -214,36 +210,31 @@ void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp
     switch (event)
     {
     case ESP_GATTS_REG_EVT:
-        ble_gatts_if[param->reg.app_id] = gatts_if;
-        switch (param->reg.app_id)
-        {
-        case PROFILE_INT_APP_ID:
-            esp_ble_gap_set_device_name(DEVICE_NAME);
-            esp_ble_gap_config_local_privacy(false);
-            esp_ble_gatts_create_attr_tab(gatt_int_env_db, gatts_if, INT_ENV_IDX_NB, 0);
-            break;
-        case PROFILE_EXT_APP_ID:
-            esp_ble_gatts_create_attr_tab(gatt_ext_env_db, gatts_if, EXT_ENV_IDX_NB, 1);
-            break;
-        default:
-            break;
-        }
+        ble_gatts_if = gatts_if;
+        esp_ble_gap_set_device_name(DEVICE_NAME);
+#if ENABLE_BLE_SECURITY
+        esp_ble_gap_config_local_privacy(false);
+#else
+        esp_ble_gap_config_adv_data(&adv_data);
+        adv_config_done |= ADV_CONFIG_FLAG;
+
+        esp_ble_gap_config_adv_data(&scan_rsp_data);
+        adv_config_done |= SCAN_RSP_CONFIG_FLAG;
+#endif /* ENABLE_BLE_SECURITY */
+        esp_ble_gatts_create_attr_tab(gatt_env_sens_db, gatts_if, ENV_SENS_IDX_NB, 0);
         break;
     case ESP_GATTS_CREAT_ATTR_TAB_EVT:
-        if (ble_gatts_if[PROFILE_INT_APP_ID] == gatts_if)
-        {
-            memcpy(int_env_sens_handle_table, param->add_attr_tab.handles, sizeof(int_env_sens_handle_table));
-            esp_ble_gatts_start_service(int_env_sens_handle_table[INT_ENV_IDX_SVC]);
-        }
-        else if (ble_gatts_if[PROFILE_EXT_APP_ID] == gatts_if)
-        {
-            memcpy(ext_env_sens_handle_table, param->add_attr_tab.handles, sizeof(ext_env_sens_handle_table));
-            esp_ble_gatts_start_service(ext_env_sens_handle_table[EXT_ENV_IDX_SVC]);
-        }
+        memcpy(env_sens_handle_table, param->add_attr_tab.handles, sizeof(env_sens_handle_table));
+        esp_ble_gatts_start_service(env_sens_handle_table[ENV_SENS_IDX_SVC]);
         break;
     case ESP_GATTS_CONNECT_EVT:
         ble_connection_id = param->connect.conn_id;
+#if ENABLE_BLE_SECURITY
         esp_ble_set_encryption(param->connect.remote_bda, ESP_BLE_SEC_ENCRYPT_MITM);
+#else
+        ble_has_connection = true;
+        xQueueSend(ble_connection_queue, &ble_has_connection, 0);
+#endif /* ENABLE_BLE_SECURITY */
         break;
     case ESP_GATTS_DISCONNECT_EVT:
         ble_has_connection = false;
@@ -274,6 +265,7 @@ void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *par
             esp_ble_gap_start_advertising(&adv_params);
         }
         break;
+#if ENABLE_BLE_SECURITY
     case ESP_GAP_BLE_SEC_REQ_EVT:
         esp_ble_gap_security_rsp(param->ble_security.ble_req.bd_addr, true);
         break;
@@ -291,6 +283,7 @@ void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *par
             xQueueSend(ble_connection_queue, &ble_has_connection, 0);
         }
         break;
+#endif /* ENABLE_BLE_SECURITY */
     default:
         break;
     }
@@ -313,12 +306,12 @@ void ble_init(QueueHandle_t connection_queue)
     ESP_ERROR_CHECK(esp_ble_gatts_register_callback(gatts_event_handler));
     ESP_ERROR_CHECK(esp_ble_gap_register_callback(gap_event_handler));
 
-    ESP_ERROR_CHECK(esp_ble_gatts_app_register(PROFILE_INT_APP_ID));
-    ESP_ERROR_CHECK(esp_ble_gatts_app_register(PROFILE_EXT_APP_ID));
+    ESP_ERROR_CHECK(esp_ble_gatts_app_register(PROFILE_APP_ID));
 
     ESP_ERROR_CHECK(esp_ble_gatt_set_local_mtu(500));
     ESP_ERROR_CHECK(esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_DEFAULT, ESP_PWR_LVL_N12));
 
+#if ENABLE_BLE_SECURITY
     esp_ble_auth_req_t auth_req = ESP_LE_AUTH_REQ_SC_MITM_BOND;
     esp_ble_io_cap_t iocap = ESP_IO_CAP_NONE;
     uint8_t key_size = 16;
@@ -332,6 +325,7 @@ void ble_init(QueueHandle_t connection_queue)
     ESP_ERROR_CHECK(esp_ble_gap_set_security_param(ESP_BLE_SM_ONLY_ACCEPT_SPECIFIED_SEC_AUTH, &auth_option, sizeof(uint8_t)));
     ESP_ERROR_CHECK(esp_ble_gap_set_security_param(ESP_BLE_SM_SET_INIT_KEY, &init_key, sizeof(uint8_t)));
     ESP_ERROR_CHECK(esp_ble_gap_set_security_param(ESP_BLE_SM_SET_RSP_KEY, &rsp_key, sizeof(uint8_t)));
+#endif /* ENABLE_BLE_SECURITY */
 }
 
 void ble_set_int_humidity_temperature(float humidity, float temperature)
@@ -339,12 +333,12 @@ void ble_set_int_humidity_temperature(float humidity, float temperature)
     int_hum_val = humidity * 100;
     int_temp_val = temperature * 100;
 
-    esp_ble_gatts_set_attr_value(int_env_sens_handle_table[INT_ENV_IDX_CHAR_VAL_HUM], sizeof(uint16_t), (uint8_t *)&int_hum_val);
-    esp_ble_gatts_set_attr_value(int_env_sens_handle_table[INT_ENV_IDX_CHAR_VAL_TEMP], sizeof(int16_t), (uint8_t *)&int_temp_val);
+    esp_ble_gatts_set_attr_value(env_sens_handle_table[ENV_SENS_IDX_CHAR_VAL_INT_HUM], sizeof(uint16_t), (uint8_t *)&int_hum_val);
+    esp_ble_gatts_set_attr_value(env_sens_handle_table[ENV_SENS_IDX_CHAR_VAL_INT_TEMP], sizeof(int16_t), (uint8_t *)&int_temp_val);
     if (ble_has_connection)
     {
-        esp_ble_gatts_send_indicate(ble_gatts_if[PROFILE_INT_APP_ID], ble_connection_id, int_env_sens_handle_table[INT_ENV_IDX_CHAR_VAL_HUM], sizeof(uint16_t), (uint8_t *)&int_hum_val, false);
-        esp_ble_gatts_send_indicate(ble_gatts_if[PROFILE_INT_APP_ID], ble_connection_id, int_env_sens_handle_table[INT_ENV_IDX_CHAR_VAL_TEMP], sizeof(int16_t), (uint8_t *)&int_temp_val, false);
+        esp_ble_gatts_send_indicate(ble_gatts_if, ble_connection_id, env_sens_handle_table[ENV_SENS_IDX_CHAR_VAL_INT_HUM], sizeof(uint16_t), (uint8_t *)&int_hum_val, false);
+        esp_ble_gatts_send_indicate(ble_gatts_if, ble_connection_id, env_sens_handle_table[ENV_SENS_IDX_CHAR_VAL_INT_TEMP], sizeof(int16_t), (uint8_t *)&int_temp_val, false);
     }
 }
 
@@ -353,12 +347,12 @@ void ble_set_int_co2_tvoc(uint16_t co2, uint16_t tvoc)
     int_co2_val = co2;
     int_tvoc_val = tvoc;
 
-    esp_ble_gatts_set_attr_value(int_env_sens_handle_table[INT_ENV_IDX_CHAR_VAL_CO2], sizeof(uint16_t), (uint8_t *)&int_co2_val);
-    esp_ble_gatts_set_attr_value(int_env_sens_handle_table[INT_ENV_IDX_CHAR_VAL_TVOC], sizeof(uint16_t), (uint8_t *)&int_tvoc_val);
+    esp_ble_gatts_set_attr_value(env_sens_handle_table[ENV_SENS_IDX_CHAR_VAL_INT_CO2], sizeof(uint16_t), (uint8_t *)&int_co2_val);
+    esp_ble_gatts_set_attr_value(env_sens_handle_table[ENV_SENS_IDX_CHAR_VAL_INT_TVOC], sizeof(uint16_t), (uint8_t *)&int_tvoc_val);
     if (ble_has_connection)
     {
-        esp_ble_gatts_send_indicate(ble_gatts_if[PROFILE_INT_APP_ID], ble_connection_id, int_env_sens_handle_table[INT_ENV_IDX_CHAR_VAL_CO2], sizeof(uint16_t), (uint8_t *)&int_co2_val, false);
-        esp_ble_gatts_send_indicate(ble_gatts_if[PROFILE_INT_APP_ID], ble_connection_id, int_env_sens_handle_table[INT_ENV_IDX_CHAR_VAL_TVOC], sizeof(uint16_t), (uint8_t *)&int_tvoc_val, false);
+        esp_ble_gatts_send_indicate(ble_gatts_if, ble_connection_id, env_sens_handle_table[ENV_SENS_IDX_CHAR_VAL_INT_CO2], sizeof(uint16_t), (uint8_t *)&int_co2_val, false);
+        esp_ble_gatts_send_indicate(ble_gatts_if, ble_connection_id, env_sens_handle_table[ENV_SENS_IDX_CHAR_VAL_INT_TVOC], sizeof(uint16_t), (uint8_t *)&int_tvoc_val, false);
     }
 }
 
@@ -368,36 +362,45 @@ void ble_set_ext_humidity_temperature_pressure(float humidity, float temperature
     ext_temp_val = temperature * 100;
     ext_press_val = pressure * 100 * 10; /*hPa -> Pa*/
 
-    esp_ble_gatts_set_attr_value(ext_env_sens_handle_table[EXT_ENV_IDX_CHAR_VAL_HUM], sizeof(uint16_t), (uint8_t *)&ext_hum_val);
-    esp_ble_gatts_set_attr_value(ext_env_sens_handle_table[EXT_ENV_IDX_CHAR_VAL_TEMP], sizeof(int16_t), (uint8_t *)&ext_temp_val);
-    esp_ble_gatts_set_attr_value(ext_env_sens_handle_table[EXT_ENV_IDX_CHAR_VAL_PRESS], sizeof(uint32_t), (uint8_t *)&ext_press_val);
+    esp_ble_gatts_set_attr_value(env_sens_handle_table[ENV_SENS_IDX_CHAR_VAL_EXT_HUM], sizeof(uint16_t), (uint8_t *)&ext_hum_val);
+    esp_ble_gatts_set_attr_value(env_sens_handle_table[ENV_SENS_IDX_CHAR_VAL_EXT_TEMP], sizeof(int16_t), (uint8_t *)&ext_temp_val);
+    esp_ble_gatts_set_attr_value(env_sens_handle_table[ENV_SENS_IDX_CHAR_VAL_EXT_PRESS], sizeof(uint32_t), (uint8_t *)&ext_press_val);
     if (ble_has_connection)
     {
-        esp_ble_gatts_send_indicate(ble_gatts_if[PROFILE_EXT_APP_ID], ble_connection_id, ext_env_sens_handle_table[EXT_ENV_IDX_CHAR_VAL_HUM], sizeof(uint16_t), (uint8_t *)&ext_hum_val, false);
-        esp_ble_gatts_send_indicate(ble_gatts_if[PROFILE_EXT_APP_ID], ble_connection_id, ext_env_sens_handle_table[EXT_ENV_IDX_CHAR_VAL_TEMP], sizeof(int16_t), (uint8_t *)&ext_temp_val, false);
-        esp_ble_gatts_send_indicate(ble_gatts_if[PROFILE_EXT_APP_ID], ble_connection_id, ext_env_sens_handle_table[EXT_ENV_IDX_CHAR_VAL_PRESS], sizeof(uint32_t), (uint8_t *)&ext_press_val, false);
+        esp_ble_gatts_send_indicate(ble_gatts_if, ble_connection_id, env_sens_handle_table[ENV_SENS_IDX_CHAR_VAL_EXT_HUM], sizeof(uint16_t), (uint8_t *)&ext_hum_val, false);
+        esp_ble_gatts_send_indicate(ble_gatts_if, ble_connection_id, env_sens_handle_table[ENV_SENS_IDX_CHAR_VAL_EXT_TEMP], sizeof(int16_t), (uint8_t *)&ext_temp_val, false);
+        esp_ble_gatts_send_indicate(ble_gatts_if, ble_connection_id, env_sens_handle_table[ENV_SENS_IDX_CHAR_VAL_EXT_PRESS], sizeof(uint32_t), (uint8_t *)&ext_press_val, false);
     }
 }
 
 void ble_enable_pairing(uint32_t passkey)
 {
+#if ENABLE_BLE_SECURITY
     esp_ble_io_cap_t iocap = ESP_IO_CAP_OUT;
     uint8_t auth_option = ESP_BLE_ONLY_ACCEPT_SPECIFIED_AUTH_DISABLE;
     ESP_ERROR_CHECK(esp_ble_gap_set_security_param(ESP_BLE_SM_IOCAP_MODE, &iocap, sizeof(uint8_t)));
     ESP_ERROR_CHECK(esp_ble_gap_set_security_param(ESP_BLE_SM_ONLY_ACCEPT_SPECIFIED_SEC_AUTH, &auth_option, sizeof(uint8_t)));
     ESP_ERROR_CHECK(esp_ble_gap_set_security_param(ESP_BLE_SM_SET_STATIC_PASSKEY, &passkey, sizeof(uint32_t)));
+#else
+    ESP_LOGE(LOG_TAG, "This feature is not supported");
+#endif /* ENABLE_BLE_SECURITY */
 }
 
 void ble_disable_pairing()
 {
+#if ENABLE_BLE_SECURITY
     esp_ble_io_cap_t iocap = ESP_IO_CAP_NONE;
     uint8_t auth_option = ESP_BLE_ONLY_ACCEPT_SPECIFIED_AUTH_ENABLE;
     ESP_ERROR_CHECK(esp_ble_gap_set_security_param(ESP_BLE_SM_ONLY_ACCEPT_SPECIFIED_SEC_AUTH, &auth_option, sizeof(uint8_t)));
     ESP_ERROR_CHECK(esp_ble_gap_set_security_param(ESP_BLE_SM_IOCAP_MODE, &iocap, sizeof(uint8_t)));
+#else
+    ESP_LOGE(LOG_TAG, "This feature is not supported");
+#endif /* ENABLE_BLE_SECURITY */
 }
 
 void ble_remove_paired_device()
 {
+#if ENABLE_BLE_SECURITY
     int dev_num = esp_ble_get_bond_device_num();
 
     ESP_LOGI(LOG_TAG, "Removing %d paired devices", dev_num);
@@ -410,4 +413,7 @@ void ble_remove_paired_device()
     }
 
     free(dev_list);
+#else
+    ESP_LOGE(LOG_TAG, "This feature is not supported");
+#endif /* ENABLE_BLE_SECURITY */
 }

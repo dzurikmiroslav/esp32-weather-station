@@ -27,6 +27,7 @@
 #define BUTTON_1 CONFIG_BUTTON_1
 #define CCS811_INT CONFIG_CCS811_INT
 #define WIFI_CHANNEL CONFIG_WIFI_CHANNEL
+#define ENABLE_BLE_SECURITY CONFIG_ENABLE_BLE_SECURITY
 
 #define SCREN_TIMEOUT 10000
 #define BUTTON_MIN_TRESHOLD 250
@@ -105,14 +106,16 @@ static uint8_t sensor_mac[ESP_NOW_ETH_ALEN] = CONFIG_SENSOR_MAC;
 static int_data_t int_data;
 static ext_data_t ext_data;
 
+static TaskHandle_t lcd_print_sensor_task;
 static QueueHandle_t lcd_print_sensor_queue;
-static QueueHandle_t ble_connection_queue;
-
-static SemaphoreHandle_t ble_reset_mutex;
 
 static TaskHandle_t ccs_read_task;
+static QueueHandle_t ble_connection_queue;
+
+#if ENABLE_BLE_SECURITY
 static TaskHandle_t ble_reset_task;
-static TaskHandle_t lcd_print_sensor_task;
+static SemaphoreHandle_t ble_reset_mutex;
+#endif /* ENABLE_BLE_SECURITY */
 
 typedef struct
 {
@@ -369,6 +372,7 @@ static void ccs_read_task_func(void *param)
    }
 }
 
+#if ENABLE_BLE_SECURITY
 static void ble_reset_task_func(void *param)
 {
    while (true)
@@ -407,9 +411,11 @@ static void ble_reset_task_func(void *param)
       }
    }
 }
+#endif /* ENABLE_BLE_SECURITY */
 
 static void IRAM_ATTR button_isr_handler(void *arg)
 {
+#if ENABLE_BLE_SECURITY
    if (!gpio_get_level(BUTTON_0) && !gpio_get_level(BUTTON_1))
    {
       xSemaphoreTakeFromISR(ble_reset_mutex, 0);
@@ -418,6 +424,7 @@ static void IRAM_ATTR button_isr_handler(void *arg)
    else
    {
       xSemaphoreGiveFromISR(ble_reset_mutex, NULL);
+#endif /* ENABLE_BLE_SECURITY */
       TickType_t now = xTaskGetTickCount();
       button_handler_data_t *handler_data = (button_handler_data_t *)arg;
       if (!gpio_get_level(handler_data->button))
@@ -429,7 +436,9 @@ static void IRAM_ATTR button_isr_handler(void *arg)
             handler_data->click_time = now;
          }
       }
+#if ENABLE_BLE_SECURITY
    }
+#endif /* ENABLE_BLE_SECURITY */
 }
 
 static void IRAM_ATTR ccs_int_isr_halder(void *arg)
@@ -507,9 +516,10 @@ static void gpio_interupt_init()
    ESP_ERROR_CHECK(gpio_install_isr_service(0));
    ESP_ERROR_CHECK(gpio_isr_handler_add(BUTTON_0, button_isr_handler, &button_handler_data[0]));
    ESP_ERROR_CHECK(gpio_isr_handler_add(BUTTON_1, button_isr_handler, &button_handler_data[1]));
-   ESP_ERROR_CHECK(gpio_isr_handler_add(CCS811_INT, ccs_int_isr_halder, NULL));\
+   ESP_ERROR_CHECK(gpio_isr_handler_add(CCS811_INT, ccs_int_isr_halder, NULL));
 
-   if (!gpio_get_level(CCS811_INT)) {
+   if (!gpio_get_level(CCS811_INT))
+   {
       ccs_read();
    }
 }
@@ -542,7 +552,9 @@ void app_main()
 
    lcd_print_sensor_queue = xQueueCreate(10, sizeof(lcd_evt_t));
    ble_connection_queue = xQueueCreate(10, sizeof(bool));
+#if ENABLE_BLE_SECURITY
    ble_reset_mutex = xSemaphoreCreateMutex();
+#endif /* ENABLE_BLE_SECURITY */
 
    i2c_init();
    bme_init();
@@ -555,5 +567,7 @@ void app_main()
    xTaskCreate(bme_read_task_func, "bme_read_task", 4 * 1024, NULL, 5, NULL);
    xTaskCreate(ccs_read_task_func, "ccs_read_task", 4 * 1024, NULL, 5, &ccs_read_task);
    xTaskCreate(lcd_print_sensor_task_func, "lcd_print_sensor_task", 4 * 1024, NULL, 5, &lcd_print_sensor_task);
+#if ENABLE_BLE_SECURITY
    xTaskCreate(ble_reset_task_func, "ble_reset_task", 4 * 1024, NULL, 5, &ble_reset_task);
+#endif /* ENABLE_BLE_SECURITY */
 }

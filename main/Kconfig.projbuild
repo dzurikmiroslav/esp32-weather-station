@@ -1,0 +1,22 @@
+menu "Wather station Configuration"
+	
+config ESPNOW_CHANNEL
+    int "WiFi chanel"
+    range 1 13
+    default 1
+    help
+		ESP-NOW chanel
+
+config ESPNOW_SENSOR_MAC
+    string "Sensor MAC address"
+    default "ff:ff:ff:ff:ff:ff"
+    help
+		ESP-NOW MAC address of sensor device
+
+config ENABLE_BLE_SECURITY
+    boolean "BLE security"
+    default false
+    help
+		BLE require pairing
+
+endmenu

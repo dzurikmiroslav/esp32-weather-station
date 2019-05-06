@@ -1,0 +1,6 @@
+[submodule "components/pcd8544"]
+	path = components/pcd8544
+	url = https://github.com/dzurikmiroslav/esp32-pcd8544
+[submodule "components/bme280"]
+	path = components/bme280
+	url = https://github.com/BoschSensortec/BME280_driver.git

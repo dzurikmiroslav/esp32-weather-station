@@ -43,8 +43,7 @@ esp_err_t i2c_write(uint8_t dev_id, uint8_t reg_addr, uint8_t *reg_data, uint16_
 
 esp_err_t i2c_read(uint8_t dev_id, uint8_t reg_addr, uint8_t *reg_data, uint16_t len)
 {
-    if (len == 0)
-    {
+    if (len == 0) {
         return 0;
     }
 
@@ -54,8 +53,7 @@ esp_err_t i2c_read(uint8_t dev_id, uint8_t reg_addr, uint8_t *reg_data, uint16_t
     i2c_master_write_byte(cmd, reg_addr, ACK_CHECK_EN);
     i2c_master_stop(cmd);
     esp_err_t ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_RATE_MS);
-    if (ret != ESP_OK)
-    {
+    if (ret != ESP_OK) {
         return ret;
     }
     i2c_cmd_link_delete(cmd);
@@ -65,8 +63,7 @@ esp_err_t i2c_read(uint8_t dev_id, uint8_t reg_addr, uint8_t *reg_data, uint16_t
     cmd = i2c_cmd_link_create();
     i2c_master_start(cmd);
     i2c_master_write_byte(cmd, (dev_id << 1) | I2C_MASTER_READ, ACK_CHECK_EN);
-    if (len > 1)
-    {
+    if (len > 1) {
         i2c_master_read(cmd, reg_data, len - 1, ACK_VAL);
     }
     i2c_master_read_byte(cmd, reg_data + len - 1, NACK_VAL);

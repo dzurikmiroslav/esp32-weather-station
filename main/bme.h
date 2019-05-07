@@ -3,9 +3,8 @@
 
 typedef struct
 {
-    float pressure;
-    float temperature;
-    float humidity;
+    int16_t temperature; // 0.01 °C
+    uint16_t humidity;   // 0.01 %
 } bme_data_t;
 
 void bme_init();

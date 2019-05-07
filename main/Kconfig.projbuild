@@ -1,17 +1,29 @@
 menu "Wather station Configuration"
 	
 config ESPNOW_CHANNEL
-    int "WiFi chanel"
+    int "ESPNOW channel"
     range 1 13
     default 1
     help
-		ESP-NOW chanel
+		ESPNOW WiFi channel.
 
 config ESPNOW_SENSOR_MAC
     string "Sensor MAC address"
     default "ff:ff:ff:ff:ff:ff"
     help
 		ESP-NOW MAC address of sensor device
+
+config ESPNOW_PMK
+    string "ESPNOW primary master key"
+    default "pmk1234567890123"
+    help
+        The length of ESPNOW primary master must be 16 bytes.
+
+config ESPNOW_LMK
+    string "ESPNOW local master key"
+    default "lmk1234567890123"
+    help
+        The length of ESPNOW local master must be 16 bytes.
 
 config ENABLE_BLE_SECURITY
     boolean "BLE security"

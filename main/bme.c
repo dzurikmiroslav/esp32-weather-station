@@ -1,3 +1,4 @@
+#include <math.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
@@ -30,7 +31,7 @@ static int8_t bme_i2c_read(uint8_t dev_id, uint8_t reg_addr, uint8_t *reg_data, 
 
 static void bme_delay_ms(uint32_t period)
 {
-    vTaskDelay(period); // divide by portTICK_PERIOD_MS returns 0 ?
+    vTaskDelay(ceilf(period / (float) portTICK_PERIOD_MS));
 }
 
 void bme_init()
@@ -43,10 +44,9 @@ void bme_init()
     ESP_ERROR_CHECK(bme280_init(&bme280));
 
     bme280.settings.osr_h = BME280_OVERSAMPLING_1X;
-    bme280.settings.osr_p = BME280_OVERSAMPLING_16X;
     bme280.settings.osr_t = BME280_OVERSAMPLING_2X;
     bme280.settings.filter = BME280_FILTER_COEFF_16;
-    uint8_t settings_sel = BME280_OSR_PRESS_SEL | BME280_OSR_TEMP_SEL | BME280_OSR_HUM_SEL | BME280_FILTER_SEL;
+    uint8_t settings_sel = BME280_OSR_TEMP_SEL | BME280_OSR_HUM_SEL | BME280_FILTER_SEL;
     ESP_ERROR_CHECK(bme280_set_sensor_settings(settings_sel, &bme280));
 }
 
@@ -57,15 +57,13 @@ bme_data_t bme_read()
 
     ESP_ERROR_CHECK(bme280_set_sensor_mode(BME280_FORCED_MODE, &bme280));
     vTaskDelay(70 / portTICK_PERIOD_MS);
-    ESP_ERROR_CHECK(bme280_get_sensor_data(BME280_ALL, &data, &bme280));
+    ESP_ERROR_CHECK(bme280_get_sensor_data(BME280_TEMP | BME280_HUM, &data, &bme280));
 
-    ret.humidity = data.humidity / 1024.0f;
-    ret.pressure = data.pressure / 10000.0f;
-    ret.temperature = data.temperature / 100.0f;
+    ret.humidity = (data.humidity / 1024.0f) * 100;
+    ret.temperature = data.temperature;
 
-    ESP_LOGD(LOG_TAG, "Pressure %f hPa", ret.pressure);
-    ESP_LOGD(LOG_TAG, "Temperature %f °C", ret.temperature);
-    ESP_LOGD(LOG_TAG, "Humidity %f %%", ret.humidity);
+    ESP_LOGD(LOG_TAG, "Temperature %d *0.01 °C", data.temperature);
+    ESP_LOGD(LOG_TAG, "Humidity %d *0.01 %%", data.humidity);
 
     return ret;
 }

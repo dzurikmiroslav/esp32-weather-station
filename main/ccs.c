@@ -66,7 +66,7 @@
 
 void ccs_init()
 {
-    const static uint8_t sw_reset[4] = {0x11, 0xe5, 0x72, 0x8a};
+    const static uint8_t sw_reset[4] = { 0x11, 0xe5, 0x72, 0x8a };
     ESP_ERROR_CHECK(i2c_write(CCS811_ADDRESS, CCS811_REG_SW_RESET, (uint8_t *)sw_reset, 4));
 
     vTaskDelay(100 / portTICK_PERIOD_MS);
@@ -93,12 +93,11 @@ void ccs_init()
     ESP_ERROR_CHECK(i2c_read(CCS811_ADDRESS, CCS811_REG_STATUS, &status, 1));
     ESP_LOGD(LOG_TAG, "Status %d", status);
 
-    if (!(status & CCS811_STATUS_FW_MODE))
-    {
+    if (!(status & CCS811_STATUS_FW_MODE)) {
         ESP_LOGD(LOG_TAG, "Switch to application mode");
         ESP_ERROR_CHECK(!(status & CCS811_STATUS_APP_VALID));
 
-        uint8_t empty[0] = {};
+        uint8_t empty[0] = { };
         ESP_ERROR_CHECK(i2c_write(CCS811_ADDRESS, CCS811_REG_APP_START, empty, 0));
         vTaskDelay(100 / portTICK_PERIOD_MS);
 
@@ -108,50 +107,15 @@ void ccs_init()
     }
 
     uint8_t meas_mode = (CCS811_MODE_10S << 4) | (1 << 3) | (0 << 2);
-    ESP_ERROR_CHECK(i2c_write(CCS811_ADDRESS, CCS811_REG_MEAS_MODE, &meas_mode, 1));  
+    ESP_ERROR_CHECK(i2c_write(CCS811_ADDRESS, CCS811_REG_MEAS_MODE, &meas_mode, 1));
 }
 
 void ccs_set_env_data(float humidity, float temperature)
 {
-    // if ((humidity < 0) || (humidity > 100))
-    // {
-    //     ESP_LOGD(LOG_TAG, "Humidity out of range");
-    //     return;
-    // }
-
-    // if ((temperature < -25) || (temperature > 50))
-    // {
-    //     ESP_LOGD(LOG_TAG, "Temperature out of range");
-    //     return;
-    // }
-
-    // uint32_t rH = humidity * 1000;
-    // uint32_t temp = temperature * 1000;
-
-    // uint8_t data[4];
-
-    // //Split value into 7-bit integer and 9-bit fractional
-    // data[0] = ((rH % 1000) / 100) > 7 ? (rH / 1000 + 1) << 1 : (rH / 1000) << 1;
-    // data[1] = 0; //CCS811 only supports increments of 0.5 so bits 7-0 will always be zero
-    // if (((rH % 1000) / 100) > 2 && (((rH % 1000) / 100) < 8))
-    // {
-    //     data[0] |= 1; //Set 9th bit of fractional to indicate 0.5%
-    // }
-
-    // temp += 25000; //Add the 25C offset
-    // //Split value into 7-bit integer and 9-bit fractional
-    // data[2] = ((temp % 1000) / 100) > 7 ? (temp / 1000 + 1) << 1 : (temp / 1000) << 1;
-    // data[3] = 0;
-    // if (((temp % 1000) / 100) > 2 && (((temp % 1000) / 100) < 8))
-    // {
-    //     data[2] |= 1; //Set 9th bit of fractional to indicate 0.5C
-    // }
-
     uint16_t temp = (temperature + 25) * 512; // -25 °C maps to 0
     uint16_t hum = humidity * 512;
 
-    uint8_t data[4] = {temp >> 8, temp & 0xff,
-                       hum >> 8, hum & 0xff};
+    uint8_t data[4] = { temp >> 8, temp & 0xff, hum >> 8, hum & 0xff };
 
     ESP_ERROR_CHECK(i2c_write(CCS811_ADDRESS, CCS811_REG_ENV_DATA, data, 4));
 }
@@ -164,8 +128,8 @@ ccs_data_t ccs_read()
 
     ESP_ERROR_CHECK(i2c_read(CCS811_ADDRESS, CCS811_REG_ALG_RESULT_DATA, data, 8));
 
-    ret.co2 = (uint16_t)(data[0]) << 8 | data[1];
-    ret.tvoc = (uint16_t)(data[2]) << 8 | data[3];
+    ret.co2 = (uint16_t) (data[0]) << 8 | data[1];
+    ret.tvoc = (uint16_t) (data[2]) << 8 | data[3];
 
     ESP_LOGD(LOG_TAG, "eCO2 %d ppm", ret.co2);
     ESP_LOGD(LOG_TAG, "TVOC %d ppb", ret.tvoc);

@@ -1,18 +1,17 @@
-#include <freertos/FreeRTOS.h>
-#include <freertos/queue.h>
-#include <freertos/task.h>
-#include <freertos/semphr.h>
-#include <esp_system.h>
-#include <esp_log.h>
-#include <nvs_flash.h>
-#include <esp_event_loop.h>
-#include <esp_wifi.h>
-#include <esp_now.h>
-#include <driver/i2c.h>
-#include <driver/gpio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
+#include "freertos/task.h"
+#include "freertos/semphr.h"
+#include "esp_system.h"
+#include "esp_log.h"
+#include "nvs_flash.h"
+#include "esp_event_loop.h"
+#include "esp_wifi.h"
+#include "esp_now.h"
+#include "driver/gpio.h"
 
 #include "display.h"
 #include "i2c.h"
@@ -28,10 +27,9 @@
 #define ESPNOW_LMK CONFIG_ESPNOW_LMK
 #define ENABLE_BLE_SECURITY CONFIG_ENABLE_BLE_SECURITY
 
-#define BUTTON_0   15
-#define BUTTON_1   13
-#define CCS811_INT 22
-
+#define BUTTON_0            15
+#define BUTTON_1            13
+#define CCS811_INT          22
 #define SCREN_TIMEOUT       10000
 #define BUTTON_MIN_TRESHOLD 250
 #define EXT_SENSOR_TIMEUT   6000000 /* 10min */
@@ -122,7 +120,12 @@ typedef struct
     uint8_t button;
 } button_handler_data_t;
 
-static button_handler_data_t button_handler_data[2] = { { .button = BUTTON_0, }, { .button = BUTTON_1, } };
+// @formatter:off
+static button_handler_data_t button_handler_data[2] = {
+        { .button = BUTTON_0, },
+        { .button = BUTTON_1, }
+};
+// @formatter:on
 
 static void ext_data_push_history(ext_data_t *data)
 {
@@ -420,11 +423,6 @@ static void IRAM_ATTR ccs_int_isr_halder(void *arg)
     xTaskResumeFromISR(ccs_read_task);
 }
 
-static esp_err_t event_handler(void *ctx, system_event_t *event)
-{
-    return ESP_OK;
-}
-
 static void espnow_recv_cb(const uint8_t *mac_addr, const uint8_t *data, int len)
 {
     lcd_evt_t evt = LCD_EVT_EXT_VALUE;
@@ -444,7 +442,7 @@ static void espnow_init()
 {
     tcpip_adapter_init();
 
-    ESP_ERROR_CHECK(esp_event_loop_init(event_handler, NULL));
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
 
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT()
     ;

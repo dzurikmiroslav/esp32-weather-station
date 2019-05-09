@@ -1,7 +1,7 @@
+#include <math.h>
+#include <string.h>
 #include "driver/gpio.h"
 #include "esp_log.h"
-#include "math.h"
-#include "string.h"
 #include "pcd8544.h"
 
 #include "display.h"
@@ -24,7 +24,7 @@
 
 // @formatter:off
 const uint8_t degree_grade_glyph[] = {
-      0x00, 0x06, 0x09, 0x09, 0x06
+        0x00, 0x06, 0x09, 0x09, 0x06
 };
 
 const uint8_t tilde_glyph[] = {

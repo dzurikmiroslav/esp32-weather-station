@@ -1,18 +1,18 @@
-#include <esp_log.h>
-#include <driver/i2c.h>
+#include "esp_log.h"
+#include "driver/i2c.h"
 
 #include "i2c.h"
 
 #define LOG_TAG "I2C"
 
-#define I2C_SDA 12
-#define I2C_SCL 14
-#define I2C_MASTER_NUM 1
-#define I2C_MASTER_FREQ_HZ 100000
-#define ACK_CHECK_EN 0x1  /*!< I2C master will check ack from slave*/
-#define ACK_CHECK_DIS 0x0 /*!< I2C master will not check ack from slave */
-#define ACK_VAL 0x0       /*!< I2C ack value */
-#define NACK_VAL 0x1      /*!< I2C nack value */
+#define I2C_SDA             12
+#define I2C_SCL             14
+#define I2C_MASTER_NUM      1
+#define I2C_MASTER_FREQ_HZ  100000
+#define ACK_CHECK_EN        0x1 /*!< I2C master will check ack from slave*/
+#define ACK_CHECK_DIS       0x0 /*!< I2C master will not check ack from slave */
+#define ACK_VAL             0x0 /*!< I2C ack value */
+#define NACK_VAL            0x1 /*!< I2C nack value */
 
 void i2c_init()
 {

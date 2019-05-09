@@ -1,9 +1,9 @@
 #ifndef BLE_H_
 #define BLE_H_
 
-#include <freertos/FreeRTOS.h>
-#include <freertos/queue.h>
 #include <stddef.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
 
 void ble_init(QueueHandle_t connection_queue);
 

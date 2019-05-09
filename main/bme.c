@@ -2,20 +2,13 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
+#include "rom/ets_sys.h"
 #include "bme280.h"
 
 #include "bme.h"
 #include "i2c.h"
 
 #define LOG_TAG "BME"
-
-#define I2C_MASTER_NUM 1
-#define WRITE_BIT I2C_MASTER_WRITE /*!< I2C master write */
-#define READ_BIT I2C_MASTER_READ   /*!< I2C master read */
-#define ACK_CHECK_EN 0x1           /*!< I2C master will check ack from slave*/
-#define ACK_CHECK_DIS 0x0          /*!< I2C master will not check ack from slave */
-#define ACK_VAL 0x0                /*!< I2C ack value */
-#define NACK_VAL 0x1               /*!< I2C nack value */
 
 struct bme280_dev bme280;
 
@@ -31,7 +24,7 @@ static int8_t bme_i2c_read(uint8_t dev_id, uint8_t reg_addr, uint8_t *reg_data, 
 
 static void bme_delay_ms(uint32_t period)
 {
-    vTaskDelay(ceilf(period / (float) portTICK_PERIOD_MS));
+    ets_delay_us(period * 1000);
 }
 
 void bme_init()

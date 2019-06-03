@@ -1,7 +1,6 @@
 set(COMPONENT_SRCS "main.c"
                    "ble.c"
-                   "bme.c"
-                   "ccs.c"
+                   "bsec_integration.c"
                    "display.c"
                    "i2c.c")
 set(COMPONENT_ADD_INCLUDEDIRS "")

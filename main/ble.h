@@ -7,9 +7,7 @@
 
 void ble_init(QueueHandle_t connection_queue);
 
-void ble_set_int_humidity_temperature(float humidity, float temperature);
-
-void ble_set_int_co2_tvoc(uint16_t co2, uint16_t tvoc);
+void ble_set_int(float humidity, float temperature, float iaq, float co2, float voc);
 
 void ble_set_ext(float humidity, float temperature, float pressure, uint8_t battery);
 

@@ -1,12 +1,9 @@
 #include <math.h>
 #include <string.h>
 #include "driver/gpio.h"
-#include "esp_log.h"
 #include "pcd8544.h"
 
 #include "display.h"
-
-#define LOG_TAG "DISPLAY"
 
 #define SPI_RST     32
 #define SPI_CE      33
@@ -119,24 +116,6 @@ float get_middle(float data[HISTORY_SIZE])
     return sum / count;
 }
 
-char *value_unit(display_value_t value)
-{
-    switch (value) {
-        case DISPLAY_VALUE_HUMIDITY:
-            return "%";
-        case DISPLAY_VALUE_PRESSURE:
-            return "hPa";
-        case DISPLAY_VALUE_TEMPERATURE:
-            return "\1C";
-        case DISPLAY_VALUE_CO2:
-            return "ppm";
-        case DISPLAY_VALUE_TVOC:
-            return "ppb";
-        default:
-            return NULL;
-    }
-}
-
 uint16_t value_unit_size(display_value_t value)
 {
     switch (value) {
@@ -146,16 +125,14 @@ uint16_t value_unit_size(display_value_t value)
             return 10;
         case DISPLAY_VALUE_TEMPERATURE:
             return 5;
-        case DISPLAY_VALUE_CO2:
-            return 1000;
-        case DISPLAY_VALUE_TVOC:
-            return 100;
+        case DISPLAY_VALUE_IAQ:
+            return 20;
         default:
             return 0;
     }
 }
 
-void display_print_int_value(float temperature, float humidity, uint16_t co2, uint16_t tvoc, display_icon_t icon)
+void display_print_int_value(float temperature, float humidity, float iaq, display_icon_t icon)
 {
     pcd8544_set_pos(0, 0);
     pcd8544_draw_bitmap(ind_icon, 7, 6, false);
@@ -168,10 +145,22 @@ void display_print_int_value(float temperature, float humidity, uint16_t co2, ui
     pcd8544_printf("%.2f%%", humidity);
 
     pcd8544_set_pos(12, 2);
-    pcd8544_printf("%dppm", co2);
+    pcd8544_printf("IAQ %.0f", roundf(iaq));
 
     pcd8544_set_pos(12, 3);
-    pcd8544_printf("%dppb", tvoc);
+    if (iaq < 50) {
+        pcd8544_puts("Good");
+    } else if (iaq < 100) {
+        pcd8544_puts("Average");
+    } else if (iaq < 150) {
+        pcd8544_puts("Little bad");
+    } else if (iaq < 200) {
+        pcd8544_puts("Bad");
+    } else if (iaq < 300) {
+        pcd8544_puts("Worse");
+    } else {
+        pcd8544_puts("Very bad");
+    }
 
     pcd8544_set_pos(78, 0);
     switch (icon) {
@@ -254,7 +243,20 @@ void display_print_graph(sensor_id_t sensor_id, display_value_t value, float dat
     pcd8544_finalize_frame_buf();
 
     pcd8544_set_pos(12, 0);
-    pcd8544_printf("%d\2%d%s", min_bound, max_bound, value_unit(value));
+    switch (value) {
+        case DISPLAY_VALUE_HUMIDITY:
+            pcd8544_printf("%d\2%d%%", min_bound, max_bound);
+            break;
+        case DISPLAY_VALUE_PRESSURE:
+            pcd8544_printf("%d\2%dhPa", min_bound, max_bound);
+            break;
+        case DISPLAY_VALUE_TEMPERATURE:
+            pcd8544_printf("%d\2%d\1C", min_bound, max_bound);
+            break;
+        case DISPLAY_VALUE_IAQ:
+            pcd8544_printf("IAQ %d\2%d", min_bound, max_bound);
+            break;
+    }
 }
 
 void display_print_min_max(sensor_id_t sensor_id, display_value_t value, float data[HISTORY_SIZE])
@@ -267,17 +269,41 @@ void display_print_min_max(sensor_id_t sensor_id, display_value_t value, float d
     float min_val;
     get_min_max(&min_val, &max_val, data);
 
-    char *unit = value_unit(value);
-
     pcd8544_set_pos(12, 0);
     pcd8544_puts("MAX");
     pcd8544_set_pos(12, 1);
-    pcd8544_printf("%.2f%s", max_val, unit);
+    switch (value) {
+        case DISPLAY_VALUE_HUMIDITY:
+            pcd8544_printf("%.2f%%", max_val);
+            break;
+        case DISPLAY_VALUE_PRESSURE:
+            pcd8544_printf("%.2fhPa", max_val);
+            break;
+        case DISPLAY_VALUE_TEMPERATURE:
+            pcd8544_printf("%.2f\1C", max_val);
+            break;
+        case DISPLAY_VALUE_IAQ:
+            pcd8544_printf("IAQ %.0f", roundf(max_val));
+            break;
+    }
 
     pcd8544_set_pos(12, 3);
     pcd8544_puts("MIN");
     pcd8544_set_pos(12, 4);
-    pcd8544_printf("%.2f%s", min_val, unit);
+    switch (value) {
+        case DISPLAY_VALUE_HUMIDITY:
+            pcd8544_printf("%.2f%%", min_val);
+            break;
+        case DISPLAY_VALUE_PRESSURE:
+            pcd8544_printf("%.2fhPa", min_val);
+            break;
+        case DISPLAY_VALUE_TEMPERATURE:
+            pcd8544_printf("%.2f\1C", min_val);
+            break;
+        case DISPLAY_VALUE_IAQ:
+            pcd8544_printf("IAQ %.0f", roundf(min_val));
+            break;
+    }
 }
 
 void display_print_pairing(uint32_t passkey, bool blink)

@@ -17,10 +17,8 @@ typedef enum
     LCD_SCREEN_TYPE_INT_TEMPERATURE_GRAPH,
     LCD_SCREEN_TYPE_INT_HUMIDITY_MIN_MAX,
     LCD_SCREEN_TYPE_INT_HUMIDITY_GRAPH,
-    LCD_SCREEN_TYPE_INT_CO2_MIN_MAX,
-    LCD_SCREEN_TYPE_INT_CO2_GRAPH,
-    LCD_SCREEN_TYPE_INT_TVOC_MIN_MAX,
-    LCD_SCREEN_TYPE_INT_TVOC_GRAPH,
+    LCD_SCREEN_TYPE_INT_IAQ_MIN_MAX,
+    LCD_SCREEN_TYPE_INT_IAQ_GRAPH,
     LCD_SCREEN_TYPE_EXT_MAIN,
     LCD_SCREEN_TYPE_EXT_TEMPERATURE_MIN_MAX,
     LCD_SCREEN_TYPE_EXT_TEMPERATURE_GRAPH,
@@ -31,7 +29,7 @@ typedef enum
 } lcd_screen_type_t;
 
 #define LCD_SCREEN_INT_FIRST LCD_SCREEN_TYPE_INT_MAIN
-#define LCD_SCREEN_INT_LAST LCD_SCREEN_TYPE_INT_TVOC_GRAPH
+#define LCD_SCREEN_INT_LAST LCD_SCREEN_TYPE_INT_IAQ_GRAPH
 #define LCD_SCREEN_EXT_FIRST LCD_SCREEN_TYPE_EXT_MAIN
 #define LCD_SCREEN_EXT_LAST LCD_SCREEN_TYPE_EXT_PRESSURE_GRAPH
 
@@ -40,12 +38,12 @@ typedef enum
 
 typedef enum
 {
-    DISPLAY_VALUE_HUMIDITY, DISPLAY_VALUE_PRESSURE, DISPLAY_VALUE_TEMPERATURE, DISPLAY_VALUE_CO2, DISPLAY_VALUE_TVOC
+    DISPLAY_VALUE_HUMIDITY, DISPLAY_VALUE_PRESSURE, DISPLAY_VALUE_TEMPERATURE, DISPLAY_VALUE_IAQ
 } display_value_t;
 
 typedef enum
 {
-    DISPLAY_ICON_NOBE, DISPLAY_ICON_BLUETOOH
+    DISPLAY_ICON_NONE, DISPLAY_ICON_BLUETOOH
 } display_icon_t;
 
 void display_init();
@@ -54,7 +52,7 @@ void display_clear();
 
 void display_sync();
 
-void display_print_int_value(float temperature, float humidity, uint16_t co2, uint16_t tvoc, display_icon_t icon);
+void display_print_int_value(float temperature, float humidity, float iaq, display_icon_t icon);
 
 void display_print_ext_value(float pressure, float temperature, float humidity, display_icon_t icon);
 

@@ -1,6 +1,6 @@
+[submodule "components/bsec"]
+	path = components/bsec
+	url = https://github.com/BoschSensortec/BSEC-Arduino-library
 [submodule "components/pcd8544"]
 	path = components/pcd8544
 	url = https://github.com/dzurikmiroslav/esp32-pcd8544
-[submodule "components/bme280"]
-	path = components/bme280
-	url = https://github.com/BoschSensortec/BME280_driver.git

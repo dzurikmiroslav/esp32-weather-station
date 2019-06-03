@@ -3,8 +3,6 @@
 
 #include "i2c.h"
 
-#define LOG_TAG "I2C"
-
 #define I2C_SDA             12
 #define I2C_SCL             14
 #define I2C_MASTER_NUM      1
@@ -28,7 +26,7 @@ void i2c_init()
     ESP_ERROR_CHECK(i2c_driver_install(i2c_master_port, conf.mode, 0, 0, 0));
 }
 
-esp_err_t i2c_write(uint8_t dev_id, uint8_t reg_addr, uint8_t *reg_data, uint16_t len)
+int8_t i2c_write(uint8_t dev_id, uint8_t reg_addr, uint8_t *reg_data, uint16_t len)
 {
     i2c_cmd_handle_t cmd = i2c_cmd_link_create();
     i2c_master_start(cmd);
@@ -38,10 +36,10 @@ esp_err_t i2c_write(uint8_t dev_id, uint8_t reg_addr, uint8_t *reg_data, uint16_
     i2c_master_stop(cmd);
     esp_err_t ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_RATE_MS);
     i2c_cmd_link_delete(cmd);
-    return ret;
+    return ret == ESP_OK ? 0 : -1;
 }
 
-esp_err_t i2c_read(uint8_t dev_id, uint8_t reg_addr, uint8_t *reg_data, uint16_t len)
+int8_t i2c_read(uint8_t dev_id, uint8_t reg_addr, uint8_t *reg_data, uint16_t len)
 {
     if (len == 0) {
         return 0;
@@ -54,7 +52,7 @@ esp_err_t i2c_read(uint8_t dev_id, uint8_t reg_addr, uint8_t *reg_data, uint16_t
     i2c_master_stop(cmd);
     esp_err_t ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_RATE_MS);
     if (ret != ESP_OK) {
-        return ret;
+        return -1;
     }
     i2c_cmd_link_delete(cmd);
 
@@ -70,5 +68,5 @@ esp_err_t i2c_read(uint8_t dev_id, uint8_t reg_addr, uint8_t *reg_data, uint16_t
     i2c_master_stop(cmd);
     ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_RATE_MS);
     i2c_cmd_link_delete(cmd);
-    return ret;
+    return ret == ESP_OK ? 0 : -1;
 }

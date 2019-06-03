@@ -15,11 +15,10 @@
 
 #include "display.h"
 #include "i2c.h"
-#include "bme.h"
-#include "ccs.h"
+#include "bsec_integration.h"
 #include "ble.h"
 
-#define LOG_TAG "MAIN"
+static const char* TAG = "main";
 
 #define ESPNOW_CHANNEL CONFIG_ESPNOW_CHANNEL
 #define ESPNOW_SENSOR_MAC CONFIG_ESPNOW_SENSOR_MAC
@@ -29,7 +28,6 @@
 
 #define BUTTON_0            15
 #define BUTTON_1            13
-#define CCS811_INT          22
 #define SCREN_TIMEOUT       10000
 #define BUTTON_MIN_TRESHOLD 250
 #define EXT_SENSOR_TIMEUT   6000000 /* 10min */
@@ -50,31 +48,18 @@ typedef enum
 
 typedef struct
 {
-    uint16_t data[HISTORY_SIZE];
-    uint8_t size;
-    uint16_t shift;
-    uint8_t scale;
-    uint32_t avg_value;
-    uint8_t avg_counter;
-} history_array_t;
-
-typedef struct
-{
     float humidity;
     float temperature;
-    uint16_t co2;
-    uint16_t tvoc;
+    float iaq;
     struct
     {
         float humidity[HISTORY_SIZE];
         float temperature[HISTORY_SIZE];
-        float co2[HISTORY_SIZE];
-        float tvoc[HISTORY_SIZE];
+        float iaq[HISTORY_SIZE];
         TickType_t write_time;
         float avg_humidity;
         float avg_temperature;
-        float avg_co2;
-        float avg_tvoc;
+        float avg_iaq;
         uint16_t avg_counter;
     } history;
 } int_data_t;
@@ -104,7 +89,6 @@ static ext_data_t ext_data;
 static TaskHandle_t lcd_print_sensor_task;
 static QueueHandle_t lcd_print_sensor_queue;
 
-static TaskHandle_t ccs_read_task;
 static QueueHandle_t ble_connection_queue;
 
 #if ENABLE_BLE_SECURITY
@@ -160,8 +144,7 @@ static void int_data_push_history(int_data_t *data)
 {
     data->history.avg_humidity += data->humidity;
     data->history.avg_temperature += data->temperature;
-    data->history.avg_co2 += data->co2;
-    data->history.avg_tvoc += data->tvoc;
+    data->history.avg_iaq += data->iaq;
     data->history.avg_counter++;
 
     TickType_t now = xTaskGetTickCount();
@@ -171,20 +154,17 @@ static void int_data_push_history(int_data_t *data)
         for (int i = 0; i < HISTORY_SIZE - 1; i++) {
             data->history.humidity[i] = data->history.humidity[i + 1];
             data->history.temperature[i] = data->history.temperature[i + 1];
-            data->history.co2[i] = data->history.co2[i + 1];
-            data->history.tvoc[i] = data->history.tvoc[i + 1];
+            data->history.iaq[i] = data->history.iaq[i + 1];
         }
 
         data->history.humidity[HISTORY_SIZE - 1] = data->history.avg_humidity / data->history.avg_counter;
         data->history.temperature[HISTORY_SIZE - 1] = data->history.avg_temperature / data->history.avg_counter;
-        data->history.co2[HISTORY_SIZE - 1] = data->history.avg_co2 / data->history.avg_counter;
-        data->history.tvoc[HISTORY_SIZE - 1] = data->history.avg_tvoc / data->history.avg_counter;
+        data->history.iaq[HISTORY_SIZE - 1] = data->history.avg_iaq / data->history.avg_counter;
 
         data->history.write_time = now;
         data->history.avg_humidity = 0.0f;
         data->history.avg_temperature = 0.0f;
-        data->history.avg_co2 = 0.0f;
-        data->history.avg_tvoc = 0.0f;
+        data->history.avg_iaq = 0.0f;
         data->history.avg_counter = 0;
     }
 }
@@ -264,8 +244,7 @@ static void lcd_print_sensor_task_func(void *param)
             display_clear();
             switch (screen) {
                 case LCD_SCREEN_TYPE_INT_MAIN:
-                    display_print_int_value(int_data.temperature, int_data.humidity, int_data.co2, int_data.tvoc,
-                            ble_connection);
+                    display_print_int_value(int_data.temperature, int_data.humidity, int_data.iaq, ble_connection);
                     break;
                 case LCD_SCREEN_TYPE_INT_HUMIDITY_MIN_MAX:
                     display_print_min_max(SENSOR_ID_INTERNAL, DISPLAY_VALUE_HUMIDITY, int_data.history.humidity);
@@ -273,11 +252,8 @@ static void lcd_print_sensor_task_func(void *param)
                 case LCD_SCREEN_TYPE_INT_TEMPERATURE_MIN_MAX:
                     display_print_min_max(SENSOR_ID_INTERNAL, DISPLAY_VALUE_TEMPERATURE, int_data.history.temperature);
                     break;
-                case LCD_SCREEN_TYPE_INT_CO2_MIN_MAX:
-                    display_print_min_max(SENSOR_ID_INTERNAL, DISPLAY_VALUE_CO2, int_data.history.co2);
-                    break;
-                case LCD_SCREEN_TYPE_INT_TVOC_MIN_MAX:
-                    display_print_min_max(SENSOR_ID_INTERNAL, DISPLAY_VALUE_TVOC, int_data.history.tvoc);
+                case LCD_SCREEN_TYPE_INT_IAQ_MIN_MAX:
+                    display_print_min_max(SENSOR_ID_INTERNAL, DISPLAY_VALUE_IAQ, int_data.history.iaq);
                     break;
                 case LCD_SCREEN_TYPE_INT_HUMIDITY_GRAPH:
                     display_print_graph(SENSOR_ID_INTERNAL, DISPLAY_VALUE_HUMIDITY, int_data.history.humidity);
@@ -285,11 +261,8 @@ static void lcd_print_sensor_task_func(void *param)
                 case LCD_SCREEN_TYPE_INT_TEMPERATURE_GRAPH:
                     display_print_graph(SENSOR_ID_INTERNAL, DISPLAY_VALUE_TEMPERATURE, int_data.history.temperature);
                     break;
-                case LCD_SCREEN_TYPE_INT_CO2_GRAPH:
-                    display_print_graph(SENSOR_ID_INTERNAL, DISPLAY_VALUE_CO2, int_data.history.co2);
-                    break;
-                case LCD_SCREEN_TYPE_INT_TVOC_GRAPH:
-                    display_print_graph(SENSOR_ID_INTERNAL, DISPLAY_VALUE_TVOC, int_data.history.tvoc);
+                case LCD_SCREEN_TYPE_INT_IAQ_GRAPH:
+                    display_print_graph(SENSOR_ID_INTERNAL, DISPLAY_VALUE_IAQ, int_data.history.iaq);
                     break;
                 case LCD_SCREEN_TYPE_EXT_MAIN:
                     display_print_ext_value(ext_data.pressure, ext_data.temperature, ext_data.humidity, ble_connection);
@@ -318,45 +291,6 @@ static void lcd_print_sensor_task_func(void *param)
     }
 }
 
-static void bme_read_task_func(void *param)
-{
-    lcd_evt_t evt = LCD_EVT_INT_VALUE;
-    bme_data_t bme_data;
-
-    while (true) {
-        bme_data = bme_read();
-
-        int_data.humidity = bme_data.humidity / 100.0f;
-        int_data.temperature = bme_data.temperature / 100.0f;
-        ble_set_int_humidity_temperature(int_data.humidity, int_data.temperature);
-        int_data_push_history(&int_data);
-
-        xQueueSend(lcd_print_sensor_queue, &evt, portMAX_DELAY);
-
-        vTaskDelay(5000 / portTICK_PERIOD_MS);
-    }
-}
-
-static void ccs_read_task_func(void *param)
-{
-    lcd_evt_t evt = LCD_EVT_INT_VALUE;
-    ccs_data_t ccs_data;
-
-    while (true) {
-        vTaskSuspend(NULL);
-        vTaskDelay(100 / portTICK_PERIOD_MS);
-        ccs_set_env_data(int_data.humidity, int_data.temperature);
-        ccs_data = ccs_read();
-
-        int_data.co2 = ccs_data.co2;
-        int_data.tvoc = ccs_data.tvoc;
-        ble_set_int_co2_tvoc(int_data.co2, int_data.tvoc);
-        int_data_push_history(&int_data);
-
-        xQueueSend(lcd_print_sensor_queue, &evt, portMAX_DELAY);
-    }
-}
-
 #if ENABLE_BLE_SECURITY
 static void ble_reset_task_func(void *param)
 {
@@ -364,7 +298,7 @@ static void ble_reset_task_func(void *param)
         vTaskSuspend(NULL);
 
         if (!xSemaphoreTake(ble_reset_mutex, 3000 / portTICK_PERIOD_MS)) {
-            ESP_LOGI(LOG_TAG, "BLE start pairing");
+            ESP_LOGI(TAG, "BLE start pairing");
             vTaskSuspend(lcd_print_sensor_task);
 
             uint32_t passkey = (esp_random() / (float) UINT32_MAX) * 999999;
@@ -380,7 +314,7 @@ static void ble_reset_task_func(void *param)
                 display_sync();
             } while (!(paired = xQueuePeek(ble_connection_queue, &connection, 1000 / portTICK_PERIOD_MS)) && countdown--);
 
-            ESP_LOGI(LOG_TAG, "BLE stop pairing");
+            ESP_LOGI(TAG, "BLE stop pairing");
             ble_disable_pairing();
 
             display_clear();
@@ -404,23 +338,18 @@ static void IRAM_ATTR button_isr_handler(void *arg)
     } else {
         xSemaphoreGiveFromISR(ble_reset_mutex, NULL);
 #endif /* ENABLE_BLE_SECURITY */
-        TickType_t now = xTaskGetTickCount();
-        button_handler_data_t *handler_data = (button_handler_data_t *) arg;
-        if (!gpio_get_level(handler_data->button)) {
-            if (now >= handler_data->click_time + BUTTON_MIN_TRESHOLD / portTICK_PERIOD_MS) {
-                lcd_evt_t evt = handler_data->button == BUTTON_0 ? LCD_EVT_CHANGE_SENSOR : LCD_EVT_CHANGE_SCREEN;
-                xQueueSendFromISR(lcd_print_sensor_queue, &evt, NULL);
-                handler_data->click_time = now;
-            }
+    TickType_t now = xTaskGetTickCount();
+    button_handler_data_t *handler_data = (button_handler_data_t *) arg;
+    if (!gpio_get_level(handler_data->button)) {
+        if (now >= handler_data->click_time + BUTTON_MIN_TRESHOLD / portTICK_PERIOD_MS) {
+            lcd_evt_t evt = handler_data->button == BUTTON_0 ? LCD_EVT_CHANGE_SENSOR : LCD_EVT_CHANGE_SCREEN;
+            xQueueSendFromISR(lcd_print_sensor_queue, &evt, NULL);
+            handler_data->click_time = now;
         }
+    }
 #if ENABLE_BLE_SECURITY
     }
 #endif /* ENABLE_BLE_SECURITY */
-}
-
-static void IRAM_ATTR ccs_int_isr_halder(void *arg)
-{
-    xTaskResumeFromISR(ccs_read_task);
 }
 
 static void espnow_recv_cb(const uint8_t *mac_addr, const uint8_t *data, int len)
@@ -441,11 +370,11 @@ static void espnow_recv_cb(const uint8_t *mac_addr, const uint8_t *data, int len
 static void espnow_init()
 {
     tcpip_adapter_init();
-
-    ESP_ERROR_CHECK(esp_event_loop_create_default());
+    ESP_ERROR_CHECK(esp_event_loop_init(NULL, NULL));
 
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT()
     ;
+
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
     ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
@@ -465,7 +394,7 @@ static void espnow_init()
     for (uint8_t i = 0; i < ESP_NOW_ETH_ALEN; i++) {
         sensor_peer.peer_addr[i] = (uint8_t) strtol(mac + (3 * i), (char **) NULL, 16);
     }
-    ESP_LOGI(LOG_TAG, "Sensor MAC %02x:%02x:%02x:%02x:%02x:%02x", sensor_peer.peer_addr[0], sensor_peer.peer_addr[1],
+    ESP_LOGI(TAG, "Sensor MAC %02x:%02x:%02x:%02x:%02x:%02x", sensor_peer.peer_addr[0], sensor_peer.peer_addr[1],
             sensor_peer.peer_addr[2], sensor_peer.peer_addr[3], sensor_peer.peer_addr[4], sensor_peer.peer_addr[5]);
 
     ESP_ERROR_CHECK(esp_now_add_peer(&sensor_peer));
@@ -481,21 +410,66 @@ static void gpio_interupt_init()
     io_conf.pull_up_en = 1;
     ESP_ERROR_CHECK(gpio_config(&io_conf));
 
-    io_conf.intr_type = GPIO_INTR_NEGEDGE;
-    io_conf.pin_bit_mask = 1ULL << CCS811_INT;
-    io_conf.mode = GPIO_MODE_INPUT;
-    io_conf.pull_down_en = 0;
-    io_conf.pull_up_en = 1;
-    ESP_ERROR_CHECK(gpio_config(&io_conf));
-
     ESP_ERROR_CHECK(gpio_install_isr_service(0));
     ESP_ERROR_CHECK(gpio_isr_handler_add(BUTTON_0, button_isr_handler, &button_handler_data[0]));
     ESP_ERROR_CHECK(gpio_isr_handler_add(BUTTON_1, button_isr_handler, &button_handler_data[1]));
-    ESP_ERROR_CHECK(gpio_isr_handler_add(CCS811_INT, ccs_int_isr_halder, NULL));
+}
 
-    if (!gpio_get_level(CCS811_INT)) {
-        ccs_read();
-    }
+static void sensor_delay(uint32_t period)
+{
+    vTaskDelay(period / portTICK_PERIOD_MS);
+}
+
+int64_t sensor_get_timestamp_us()
+{
+    return esp_timer_get_time();
+}
+
+static uint32_t sensor_state_load(uint8_t *state_buffer, uint32_t n_buffer)
+{
+    return 0;
+}
+
+static void sensor_state_save(const uint8_t *state_buffer, uint32_t length)
+{
+}
+
+static uint32_t sensor_config_load(uint8_t *config_buffer, uint32_t n_buffer)
+{
+    return 0;
+}
+
+static void sensor_output_ready(int64_t timestamp, float iaq, uint8_t iaq_accuracy, float temperature, float humidity,
+        float pressure, float raw_temperature, float raw_humidity, float gas, bsec_library_return_t bsec_status,
+        float static_iaq, float co2_equivalent, float breath_voc_equivalent)
+{
+    ESP_LOGD(TAG, "Temperature %f °C", temperature);
+    ESP_LOGD(TAG, "Humidity %f %%", humidity);
+    ESP_LOGD(TAG, "IAQ %f", iaq);
+    ESP_LOGD(TAG, "CO2 equivalent %f ppm VOC equivalent %f ppm", co2_equivalent, breath_voc_equivalent);
+
+    int_data.humidity = humidity;
+    int_data.temperature = temperature;
+    int_data.iaq = iaq;
+
+    ble_set_int(humidity, temperature, iaq, co2_equivalent, breath_voc_equivalent);
+    int_data_push_history(&int_data);
+
+    lcd_evt_t evt = LCD_EVT_INT_VALUE;
+    xQueueSend(lcd_print_sensor_queue, &evt, portMAX_DELAY);
+}
+
+static void sensor_init()
+{
+    return_values_init ret = bsec_iot_init(BSEC_SAMPLE_RATE_LP, 0.0f, i2c_write, i2c_read, sensor_delay,
+            sensor_state_load, sensor_config_load);
+    ESP_ERROR_CHECK(ret.bme680_status);
+    ESP_ERROR_CHECK(ret.bsec_status);
+}
+
+static void senosor_read_task_func(void *param)
+{
+    bsec_iot_loop(sensor_delay, sensor_get_timestamp_us, sensor_output_ready, sensor_state_save, UINT32_MAX);
 }
 
 void app_main()
@@ -510,8 +484,7 @@ void app_main()
     for (uint8_t i = 0; i < HISTORY_SIZE; i++) {
         int_data.history.humidity[i] = NAN;
         int_data.history.temperature[i] = NAN;
-        int_data.history.co2[i] = NAN;
-        int_data.history.tvoc[i] = NAN;
+        int_data.history.iaq[i] = NAN;
         ext_data.history.humidity[i] = NAN;
         ext_data.history.pressure[i] = NAN;
         ext_data.history.temperature[i] = NAN;
@@ -527,16 +500,14 @@ void app_main()
 #endif /* ENABLE_BLE_SECURITY */
 
     i2c_init();
-    bme_init();
-    ccs_init();
+    sensor_init();
     espnow_init();
     ble_init(ble_connection_queue);
     display_init();
     gpio_interupt_init();
 
-    xTaskCreate(bme_read_task_func, "bme_read_task", 4 * 1024, NULL, 5, NULL);
-    xTaskCreate(ccs_read_task_func, "ccs_read_task", 4 * 1024, NULL, 5, &ccs_read_task);
     xTaskCreate(lcd_print_sensor_task_func, "lcd_print_sensor_task", 4 * 1024, NULL, 5, &lcd_print_sensor_task);
+    xTaskCreate(senosor_read_task_func, "senosor_read_task", 4 * 1024, NULL, 5, NULL);
 #if ENABLE_BLE_SECURITY
     xTaskCreate(ble_reset_task_func, "ble_reset_task", 4 * 1024, NULL, 5, &ble_reset_task);
 #endif /* ENABLE_BLE_SECURITY */

@@ -4,3 +4,6 @@
 [submodule "components/pcd8544"]
 	path = components/pcd8544
 	url = https://github.com/dzurikmiroslav/esp32-pcd8544
+[submodule "components/u8g2"]
+	path = components/u8g2
+	url = https://github.com/olikraus/u8g2

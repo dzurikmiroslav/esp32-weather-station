@@ -3,48 +3,38 @@
 
 #include <stddef.h>
 
-#define HISTORY_SIZE 72        /* 3px each hour */
+#define HISTORY_SIZE        96          /* 4px each hour */
+#define HISTORY_PERIOD      900000      /* 15min */
 
 typedef enum
 {
-    SENSOR_ID_INTERNAL, SENSOR_ID_EXTERNAL
-} sensor_id_t;
-
-typedef enum
-{
-    LCD_SCREEN_TYPE_INT_MAIN,
-    LCD_SCREEN_TYPE_INT_TEMPERATURE_MIN_MAX,
-    LCD_SCREEN_TYPE_INT_TEMPERATURE_GRAPH,
-    LCD_SCREEN_TYPE_INT_HUMIDITY_MIN_MAX,
-    LCD_SCREEN_TYPE_INT_HUMIDITY_GRAPH,
-    LCD_SCREEN_TYPE_INT_IAQ_MIN_MAX,
-    LCD_SCREEN_TYPE_INT_IAQ_GRAPH,
-    LCD_SCREEN_TYPE_EXT_MAIN,
-    LCD_SCREEN_TYPE_EXT_TEMPERATURE_MIN_MAX,
-    LCD_SCREEN_TYPE_EXT_TEMPERATURE_GRAPH,
-    LCD_SCREEN_TYPE_EXT_HUMIDITY_MIN_MAX,
-    LCD_SCREEN_TYPE_EXT_HUMIDITY_GRAPH,
-    LCD_SCREEN_TYPE_EXT_PRESSURE_MIN_MAX,
-    LCD_SCREEN_TYPE_EXT_PRESSURE_GRAPH
-} lcd_screen_type_t;
-
-#define LCD_SCREEN_INT_FIRST LCD_SCREEN_TYPE_INT_MAIN
-#define LCD_SCREEN_INT_LAST LCD_SCREEN_TYPE_INT_IAQ_GRAPH
-#define LCD_SCREEN_EXT_FIRST LCD_SCREEN_TYPE_EXT_MAIN
-#define LCD_SCREEN_EXT_LAST LCD_SCREEN_TYPE_EXT_PRESSURE_GRAPH
-
-#define LCD_SCREEN_IS_INT(screen) (screen >= LCD_SCREEN_INT_FIRST && screen <= LCD_SCREEN_INT_LAST)
-#define LCD_SCREEN_IS_EXT(screen) (screen >= LCD_SCREEN_EXT_FIRST && screen <= LCD_SCREEN_EXT_LAST)
-
-typedef enum
-{
-    DISPLAY_VALUE_HUMIDITY, DISPLAY_VALUE_PRESSURE, DISPLAY_VALUE_TEMPERATURE, DISPLAY_VALUE_IAQ
+    DISPLAY_VALUE_TEMPERATURE,
+    DISPLAY_VALUE_HUMIDITY,
+    DISPLAY_VALUE_PRESSURE,
+    DISPLAY_VALUE_IAQ,
+    DISPLAY_VALUE_OUT_TEMPERATURE,
+    DISPLAY_VALUE_OUT_HUMIDITY,
+    DISPLAY_VALUE_NB
 } display_value_t;
 
 typedef enum
 {
-    DISPLAY_ICON_NONE, DISPLAY_ICON_BLUETOOH
-} display_icon_t;
+    DISPLAY_SETTING_TIME,
+    DISPLAY_SETTING_BT_START_PAIRING,
+    DISPLAY_SETTING_BT_REMOVE_PAIRED_DEVICES,
+    DISPLAY_SETTING_BACK,
+    DISPLAY_SETTING_NB
+} display_setting_t;
+
+typedef enum
+{
+    DISPLAY_TIME_HOURS,
+    DISPLAY_TIME_MINUTES,
+    DISPLAY_TIME_SECONDS,
+    DISPLAY_TIME_SET,
+    DISPLAY_TIME_BACK,
+    DISPLAY_TIME_NB
+} display_time_t;
 
 void display_init();
 
@@ -52,13 +42,14 @@ void display_clear();
 
 void display_sync();
 
-void display_print_int_value(float temperature, float humidity, float iaq, display_icon_t icon);
+void display_print_main(float temperature, float humidity, float iaq, float pressure, float out_temperature,
+        float out_humidity, bool bt_connection, display_value_t selected_value);
 
-void display_print_ext_value(float pressure, float temperature, float humidity, display_icon_t icon);
+void display_print_graph(display_value_t value, float data[HISTORY_SIZE]);
 
-void display_print_min_max(sensor_id_t sensor_id, display_value_t value, float data[HISTORY_SIZE]);
+void display_settins(display_setting_t selected);
 
-void display_print_graph(sensor_id_t sensor_id, display_value_t value, float data[HISTORY_SIZE]);
+void display_time(uint8_t hours_offset, uint8_t minutes_offset, uint8_t seconds_offset, display_time_t selected);
 
 void display_print_pairing(uint32_t passkey, bool blink);
 

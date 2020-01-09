@@ -7,9 +7,9 @@
 
 void ble_init(QueueHandle_t connection_queue);
 
-void ble_set_int(float humidity, float temperature, float iaq, float co2, float voc);
+void ble_set_telemetry(float humidity, float temperature, float pressure, float iaq, float co2, float voc);
 
-void ble_set_ext(float humidity, float temperature, float pressure, uint8_t battery);
+void ble_set_out_telemetry(float humidity, float temperature, uint8_t battery);
 
 void ble_remove_paired_device();
 

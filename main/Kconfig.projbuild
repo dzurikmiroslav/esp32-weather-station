@@ -25,10 +25,4 @@ config ESPNOW_LMK
     help
         The length of ESPNOW local master must be 16 bytes.
 
-config ENABLE_BLE_SECURITY
-    boolean "BLE security"
-    default false
-    help
-		BLE require pairing
-
 endmenu

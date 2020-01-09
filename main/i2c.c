@@ -3,8 +3,8 @@
 
 #include "i2c.h"
 
-#define I2C_SDA             12
-#define I2C_SCL             14
+#define I2C_SDA             23
+#define I2C_SCL             22
 #define I2C_MASTER_NUM      1
 #define I2C_MASTER_FREQ_HZ  100000
 #define ACK_CHECK_EN        0x1 /*!< I2C master will check ack from slave*/
